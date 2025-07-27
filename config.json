@@ -1,0 +1,9 @@
+{
+  "rds_host": "",
+  "rds_port": "3306",
+  "rds_user": "",
+  "rds_password" : "",
+  "rds_db": "SportsAnalytics",
+  "server_host": "localhost",
+  "server_port":"6100"
+}
