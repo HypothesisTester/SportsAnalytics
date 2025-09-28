@@ -1,0 +1,9 @@
+{
+  "rds_host": "sports-betting-db.cxs86s88k0u3.eu-north-1.rds.amazonaws.com",
+  "rds_port": "3306",
+  "rds_user": "admin",
+  "rds_password" : "nbabetting",
+  "rds_db": "sports_betting",
+  "server_host": "localhost",
+  "server_port":"6100"
+}
