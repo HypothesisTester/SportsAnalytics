@@ -662,13 +662,15 @@ LIMIT ? OFFSET ?;`,
 const trivia_top_matchups = async function(req, res) {
   connection.query(
 `
-  SELECT player1 AS name1,
-         player2 AS name2,
-         total_games,
-         avg_pct_pts
-  FROM topmatchups
-  WHERE total_games >= ${req.query.minimum_games}
-  ORDER BY avg_pct_pts DESC
+  SELECT P1.display_first_last AS name1,
+         P2.display_first_last AS name2,
+         TM.total_games,
+         TM.avg_pct_pts
+  FROM topmatchups TM
+  JOIN players P1 ON TM.player1 = P1.person_id
+  JOIN players P2 ON TM.player2 = P2.person_id
+  WHERE TM.total_games >= ${req.query.minimum_games}
+  ORDER BY TM.avg_pct_pts DESC
   LIMIT 15;
   `, (err, data) => sendQueryResult(res, err, data, [])
   );
