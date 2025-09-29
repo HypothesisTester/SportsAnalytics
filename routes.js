@@ -214,45 +214,38 @@ const player_underdog = async function (req, res) {
 const player_spread_performance = async function (req, res) {
   connection.query(
     `
-    WITH total_games AS (
-      SELECT P.player_id, COUNT(*) AS total_games
-      FROM player_stats P
-      WHERE P.player_id = ${req.params.player_id}
-      GROUP BY P.player_id
-  ), pts_difference AS (
-      SELECT G1.pts - G2.pts AS pts_difference, G2.pts - G1.pts AS pts_difference2, G1.game_id
-      FROM game_data G1 JOIN game_data G2 on G1.game_id = G2.game_id AND G1.a_team_id = G2.team_id
-      WHERE G1.is_home = 'f'
-  ), spread_covers1 AS (
-      SELECT COUNT(B.game_id) AS count, PS.player_id
-      FROM player_stats PS JOIN (
-          SELECT DISTINCT B.game_id, B.team_id
-          FROM betting_data B JOIN pts_difference G ON B.game_id = G.game_id AND pts_difference2 < B.spread1
-      ) B ON PS.team_id = B.team_id AND PS.game_id = B.game_id
-      WHERE PS.player_id = ${req.params.player_id}
-      GROUP BY PS.player_id
-  ), spread_covers2 AS (
-      SELECT COUNT(B.game_id) AS count, PS.player_id
-      FROM player_stats PS JOIN (
-          SELECT DISTINCT B.game_id, B.a_team_id
-          FROM betting_data B JOIN pts_difference G ON B.game_id = G.game_id AND pts_difference < B.spread2
-      ) B ON PS.team_id = B.a_team_id AND PS.game_id = B.game_id
-      WHERE PS.player_id = ${req.params.player_id}
-      GROUP BY PS.player_id
+    WITH player_spread_results AS (
+      SELECT ps.player_id,
+             CASE
+               WHEN ps.team_id = b.team_id THEN IF((g_home.pts + b.spread1) > g_away.pts, 1, 0)
+               WHEN ps.team_id = b.a_team_id THEN IF((g_away.pts + b.spread2) > g_home.pts, 1, 0)
+               ELSE 0
+             END AS covered
+      FROM player_stats ps
+      JOIN betting_data b ON ps.game_id = b.game_id
+      JOIN game_data g_home ON b.game_id = g_home.game_id AND b.team_id = g_home.team_id
+      JOIN game_data g_away ON b.game_id = g_away.game_id AND b.a_team_id = g_away.team_id
+      WHERE b.book_name = '5Dimes'
+        AND ps.player_id = ${req.params.player_id}
+  ), player_cover_totals AS (
+      SELECT psr.player_id,
+             COUNT(*) AS total_games,
+             SUM(psr.covered) AS spread_covers
+      FROM player_spread_results psr
+      GROUP BY psr.player_id
   )
   SELECT P.person_id,
          P.display_first_last,
-         COALESCE(S1.count, 0) + COALESCE(S2.count, 0) AS count,
-         TG.total_games,
+         COALESCE(PCT.spread_covers, 0) AS count,
+         COALESCE(PCT.total_games, 0) AS total_games,
          CASE
-           WHEN TG.total_games > 0
-             THEN (COALESCE(S1.count, 0) + COALESCE(S2.count, 0)) / TG.total_games
+           WHEN COALESCE(PCT.total_games, 0) > 0
+             THEN COALESCE(PCT.spread_covers, 0) / PCT.total_games
            ELSE 0
          END AS spread_percentage
-  FROM total_games TG
-      LEFT JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
-      LEFT JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
-      JOIN players P ON TG.player_id = P.person_id;
+  FROM players P
+      LEFT JOIN player_cover_totals PCT ON P.person_id = PCT.player_id
+  WHERE P.person_id = ${req.params.player_id};
 `,
     (err, data) => sendQueryResult(res, err, data, [])
   );
@@ -697,42 +690,35 @@ WHERE 1 / IF(B1.spread_price1 < 0, 1 + 100 / ABS(B1.spread_price1), B1.spread_pr
 
 // Return the top players in terms of meeting their spreads, with a filter of the minimum number of games to consider when finding this (for consistency measurement)
 const trivia_spread_players = async function(req, res) {
-  connection.query(`WITH total_games AS (
-    SELECT P.player_id, COUNT(*) AS total_games
-    FROM player_stats P
-    GROUP BY P.player_id
-    HAVING total_games >= ${req.query.minimum_games}
- ), pts_difference AS (
-    SELECT G1.pts - G2.pts AS pts_difference, G2.pts - G1.pts AS pts_difference2, G1.game_id
-    FROM game_data G1 JOIN game_data G2 on G1.game_id = G2.game_id AND G1.a_team_id = G2.team_id
-    WHERE G1.is_home = 'f'
- ), spread_covers1 AS (
-    SELECT COUNT(B.game_id) AS count, PS.player_id
-    FROM player_stats PS JOIN (
-        SELECT DISTINCT B.game_id, B.team_id
-        FROM betting_data B JOIN pts_difference G ON B.game_id = G.game_id AND pts_difference2 < B.spread1
-    ) B ON PS.team_id = B.team_id AND PS.game_id = B.game_id
-    GROUP BY PS.player_id
- ), spread_covers2 AS (
-    SELECT COUNT(B.game_id) AS count, PS.player_id
-    FROM player_stats PS JOIN (
-        SELECT DISTINCT B.game_id, B.a_team_id
-        FROM betting_data B JOIN pts_difference G ON B.game_id = G.game_id AND pts_difference < B.spread2
-    ) B ON PS.team_id = B.a_team_id AND PS.game_id = B.game_id
-    GROUP BY PS.player_id
- )
-  SELECT P.person_id,
-         P.display_first_last,
-         COALESCE(S1.count, 0) + COALESCE(S2.count, 0) AS count,
-         TG.total_games,
-         (COALESCE(S1.count, 0) + COALESCE(S2.count, 0)) / TG.total_games AS spread_percentage
-  FROM total_games TG
-      LEFT JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
-      LEFT JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
-      JOIN players P ON TG.player_id = P.person_id
- ORDER BY spread_percentage DESC
- LIMIT 15`, 
-  (err, data) => sendQueryResult(res, err, data, [])
+  connection.query(`
+    WITH player_game_totals AS (
+      SELECT ps.player_id,
+             SUM(
+               CASE
+                 WHEN ps.team_id = b.team_id THEN IF((g_home.pts + b.spread1) > g_away.pts, 1, 0)
+                 WHEN ps.team_id = b.a_team_id THEN IF((g_away.pts + b.spread2) > g_home.pts, 1, 0)
+                 ELSE 0
+               END
+             ) AS spread_covers,
+             COUNT(*) AS total_games
+      FROM player_stats ps
+      JOIN betting_data b ON ps.game_id = b.game_id
+      JOIN game_data g_home ON b.game_id = g_home.game_id AND b.team_id = g_home.team_id
+      JOIN game_data g_away ON b.game_id = g_away.game_id AND b.a_team_id = g_away.team_id
+      WHERE b.book_name = '5Dimes'
+      GROUP BY ps.player_id
+    )
+    SELECT P.person_id,
+           P.display_first_last,
+           PGT.spread_covers AS count,
+           PGT.total_games,
+           CASE WHEN PGT.total_games > 0 THEN PGT.spread_covers / PGT.total_games ELSE 0 END AS spread_percentage
+    FROM player_game_totals PGT
+    JOIN players P ON PGT.player_id = P.person_id
+    WHERE PGT.total_games >= ${req.query.minimum_games}
+    ORDER BY spread_percentage DESC
+    LIMIT 15`,
+    (err, data) => sendQueryResult(res, err, data, [])
   )
 }
 
