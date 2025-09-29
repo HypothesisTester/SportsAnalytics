@@ -516,53 +516,64 @@ WHERE B1.spread1 <= B2.spread1 - ${threshold};`,
 // Search for players (with optional parameters for filtering)
 const player_search = async function (req, res) {
   const rawName = (req.query.name || '').trim();
-  if (rawName.length < 2) {
-    return res.json([]);
-  }
-
   const page = parseInt(req.query["page"]) || 1;
   const resultsPerPage = 20;
   const offset = (page - 1) * resultsPerPage;
   const likeParam = `%${rawName}%`;
+  const shouldFilter = rawName.length >= 2;
+
+  let sql = `SELECT p.person_id,
+                    p.display_first_last,
+                    p.from_year,
+                    p.to_year,
+                    p.draft_year,
+                    p.height_feet,
+                    p.height_inches,
+                    p.weight,
+                    p.team_id AS team_id,
+                    p.jersey,
+                    p.school,
+                    p.country,
+                    AVG(ps.fgm) AS fgm,
+                    AVG(ps.fga) AS fga,
+                    AVG(ps.fg_pct) AS fg_pct,
+                    AVG(ps.fg3m) AS fg3m,
+                    AVG(ps.fg3a) AS fg3a,
+                    AVG(ps.fg3_pct) AS fg3_pct,
+                    AVG(ps.ftm) AS ftm,
+                    AVG(ps.fta) AS fta,
+                    AVG(ps.ft_pct) AS ft_pct,
+                    AVG(ps.oreb) AS oreb,
+                    AVG(ps.dreb) AS dreb,
+                    AVG(ps.reb) AS reb,
+                    AVG(ps.ast) AS ast,
+                    AVG(ps.stl) AS stl,
+                    AVG(ps.blk) AS blk,
+                    AVG(ps.tov) AS tov,
+                    AVG(ps.pf) AS pf,
+                    AVG(ps.pts) AS pts,
+                    AVG(ps.min) AS min,
+                    COUNT(ps.game_id) AS games_played
+             FROM player_stats ps
+             JOIN players p ON ps.player_id = p.person_id`;
+
+  const params = [];
+  if (shouldFilter) {
+    sql += `
+             WHERE p.display_first_last LIKE ?`;
+    params.push(likeParam);
+  }
+
+  sql += `
+             GROUP BY p.person_id
+             ORDER BY ${shouldFilter ? 'p.display_first_last' : 'games_played DESC'}
+             LIMIT ? OFFSET ?;`;
+
+  params.push(resultsPerPage, offset);
 
   connection.query(
-    `SELECT p.person_id,
-            p.display_first_last,
-            p.from_year,
-            p.to_year,
-            p.draft_year,
-            p.height_feet,
-            p.height_inches,
-            p.weight,
-            p.team_id AS team_id,
-            p.jersey,
-            p.school,
-            p.country,
-            AVG(ps.fgm) AS fgm,
-            AVG(ps.fga) AS fga,
-            AVG(ps.fg_pct) AS fg_pct,
-            AVG(ps.fg3m) AS fg3m,
-            AVG(ps.fg3a) AS fg3a,
-            AVG(ps.fg3_pct) AS fg3_pct,
-            AVG(ps.ftm) AS ftm,
-            AVG(ps.fta) AS fta,
-            AVG(ps.ft_pct) AS ft_pct,
-            AVG(ps.oreb) AS oreb,
-            AVG(ps.dreb) AS dreb,
-            AVG(ps.reb) AS reb,
-            AVG(ps.ast) AS ast,
-            AVG(ps.stl) AS stl,
-            AVG(ps.blk) AS blk,
-            AVG(ps.tov) AS tov,
-            AVG(ps.pf) AS pf,
-            AVG(ps.pts) AS pts,
-            AVG(ps.min) AS min
-     FROM player_stats ps
-     JOIN players p ON ps.player_id = p.person_id
-     WHERE p.display_first_last LIKE ?
-     GROUP BY p.person_id
-     LIMIT ? OFFSET ?;`,
-    [likeParam, resultsPerPage, offset],
+    sql,
+    params,
     (err, data) => {
       if (err) {
         console.log(err);
