@@ -240,10 +240,18 @@ const player_spread_performance = async function (req, res) {
       WHERE PS.player_id = ${req.params.player_id}
       GROUP BY PS.player_id
   )
-  SELECT P.person_id, P.display_first_last, S1.count + S2.count AS count, TG.total_games,
-         (S1.count + S2.count) / TG.total_games AS spread_percentage
-  FROM total_games TG JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
-      JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
+  SELECT P.person_id,
+         P.display_first_last,
+         COALESCE(S1.count, 0) + COALESCE(S2.count, 0) AS count,
+         TG.total_games,
+         CASE
+           WHEN TG.total_games > 0
+             THEN (COALESCE(S1.count, 0) + COALESCE(S2.count, 0)) / TG.total_games
+           ELSE 0
+         END AS spread_percentage
+  FROM total_games TG
+      LEFT JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
+      LEFT JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
       JOIN players P ON TG.player_id = P.person_id;
 `,
     (err, data) => sendQueryResult(res, err, data, [])
@@ -318,7 +326,7 @@ const matchup_top_pairs = async function (req, res) {
               PS1.team_id = GX.team_id AND PS2.team_id = GX.a_team_id
         GROUP BY PS1.player_id, PS2.player_id
     )
-    SELECT P1.display_first_last AS player1, P2.display_first_last AS player2, TG.total_games, AVG((PS1.pts + PS2.pts) / (G1.pts + G2.pts)) AS avg_pct_pts
+    SELECT P1.display_first_last AS name1, P2.display_first_last AS name2, TG.total_games, AVG((PS1.pts + PS2.pts) / (G1.pts + G2.pts)) AS avg_pct_pts
     FROM player_stats PS1 JOIN player_stats PS2 ON PS1.game_id = PS2.game_id AND PS1.team_id <> PS2.team_id
         JOIN game_data G1 ON PS1.game_id = G1.game_id AND PS1.team_id = G1.team_id
         JOIN game_data G2 ON PS1.game_id = G2.game_id AND PS2.team_id = G2.team_id
@@ -713,11 +721,15 @@ const trivia_spread_players = async function(req, res) {
     ) B ON PS.team_id = B.a_team_id AND PS.game_id = B.game_id
     GROUP BY PS.player_id
  )
- SELECT P.person_id, P.display_first_last, S1.count + S2.count AS count, TG.total_games,
-       (S1.count + S2.count) / TG.total_games AS spread_percentage
- FROM total_games TG JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
-    JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
-    JOIN players P ON TG.player_id = P.person_id
+  SELECT P.person_id,
+         P.display_first_last,
+         COALESCE(S1.count, 0) + COALESCE(S2.count, 0) AS count,
+         TG.total_games,
+         (COALESCE(S1.count, 0) + COALESCE(S2.count, 0)) / TG.total_games AS spread_percentage
+  FROM total_games TG
+      LEFT JOIN spread_covers1 S1 ON TG.player_id = S1.player_id
+      LEFT JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
+      JOIN players P ON TG.player_id = P.person_id
  ORDER BY spread_percentage DESC
  LIMIT 15`, 
   (err, data) => sendQueryResult(res, err, data, [])
