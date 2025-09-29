@@ -13,6 +13,22 @@ const connection = mysql.createConnection({
 });
 connection.connect((err) => err && console.log(err));
 
+// Utility to send consistent responses for MySQL queries
+const sendQueryResult = (res, err, data, emptyPayload = []) => {
+  // Prevent API caches from serving stale 304 responses with empty bodies
+  res.set('Cache-Control', 'no-store');
+  if (err) {
+    console.log(err);
+    return res.status(500).json({ error: 'Database query failed.' });
+  }
+
+  if (!data || data.length === 0) {
+    return res.json(emptyPayload);
+  }
+
+  return res.json(data);
+};
+
 // game page routes
 
 // GET /game/:game_id
@@ -26,17 +42,21 @@ const game = async function (req, res) {
         WHERE G.game_id=${req.params.game_id}
     `,
     (err, data) => {
-      if (err || data.length < 2) {
+      if (err) {
         console.log(err);
-        res.json({});
-      } else {
-        if (data[0].is_home === "f") {
-          temp = data[0];
-          data[0] = data[1];
-          data[1] = temp;
-        }
-        return res.json(data);
+        return res.status(500).json({ error: 'Database query failed.' });
       }
+
+      if (!data || data.length < 2) {
+        return res.status(404).json({});
+      }
+
+      if (data[0].is_home === "f") {
+        const temp = data[0];
+        data[0] = data[1];
+        data[1] = temp;
+      }
+      return res.json(data);
     }
   );
 };
@@ -53,20 +73,26 @@ const game_players = async function (req, res) {
         ORDER BY PS.min DESC;
     `,
     (err, data) => {
-      if (err || data.length === 0) {
+      if (err) {
         console.log(err);
-        res.json({});
-      } else {
-        output = [[], []];
-        for (i = 0; i < data.length; i++) {
-          if (data[i].is_home === "t") {
-            output[0].push(data[i]);
-          } else {
-            output[1].push(data[i]);
-          }
-        }
-        res.json(output);
+        return res
+          .status(500)
+          .json({ error: 'Database query failed.' });
       }
+
+      if (!data || data.length === 0) {
+        return res.json([[], []]);
+      }
+
+      const output = [[], []];
+      for (let i = 0; i < data.length; i += 1) {
+        if (data[i].is_home === "t") {
+          output[0].push(data[i]);
+        } else {
+          output[1].push(data[i]);
+        }
+      }
+      return res.json(output);
     }
   );
 };
@@ -80,14 +106,7 @@ const game_betting = async function (req, res) {
         FROM betting_data
         WHERE game_id = ${req.params.game_id};
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -102,14 +121,7 @@ const games_for_team = async function (req, res) {
         WHERE G.team_id = ${req.params.team_id}
         ORDER BY G.game_date;
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -124,14 +136,7 @@ const games_for_player = async function (req, res) {
         WHERE player_id = ${req.params.player_id}
         ORDER BY G.game_date;
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -146,14 +151,7 @@ const player_information = async function (req, res) {
         FROM players
         WHERE person_id = ${req.params.player_id};
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -168,14 +166,7 @@ const player_average_stats = async function (req, res) {
         FROM player_stats
         WHERE player_id = ${req.params.player_id};
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -212,14 +203,7 @@ const player_underdog = async function (req, res) {
         GROUP BY P.player_id
     ) P ON P.player_id = P2.person_id
 `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -262,14 +246,7 @@ const player_spread_performance = async function (req, res) {
       JOIN spread_covers2 S2 ON TG.player_id = S2.player_id
       JOIN players P ON TG.player_id = P.person_id;
 `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -325,14 +302,7 @@ const matchup_stats = async function (req, res) {
         )
         SELECT *
         FROM win_loss, betting_averages, advanced_betting_stats;`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -362,14 +332,7 @@ const matchup_top_pairs = async function (req, res) {
     ORDER BY AVG((PS1.pts + PS2.pts) / (G1.pts + G2.pts)) DESC
     LIMIT 25;
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -382,14 +345,7 @@ const team = async function (req, res) {
             FROM game_data GROUP BY team_id
         ) SELECT name, abbreviation, teams.team_id, number_wins, number_losses, avg_points, avg_rebounds, avg_assists, min_year, max_year
         FROM unique_games_avg JOIN teams ON unique_games_avg.team_id = teams.team_id WHERE teams.team_id = ${team1ID};`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -408,14 +364,7 @@ const team_game_betting_data = async function (req, res) {
         WHERE a_team_id = ${team1ID}
         ) T
         GROUP BY book_name;`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -441,14 +390,7 @@ const team_underdog_wins = async function (req, res) {
             AND T2.team_id = T.team_id
             AND T.team_id = ${team1ID}
         GROUP BY T.team_id;`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -475,14 +417,7 @@ const team_underdog_money = async function (req, res) {
             AND T.team_id = ${team1ID}
             AND B.book_name = '5Dimes'
         GROUP BY T.team_id`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -503,14 +438,7 @@ FROM players P JOIN player_stats_avg PSA on P.person_id = PSA.player_id
 WHERE PSA.team_id = ${team_id}
 ORDER BY avg_PRA DESC
 LIMIT ${num_players}`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -535,14 +463,7 @@ const team_spread_covering_percentage = async function (req, res) {
         GROUP BY T.team_id
         ORDER BY COUNT(DISTINCT B.game_id) / TG.total_games DESC;
     `,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-        res.json({});
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -596,9 +517,7 @@ WHERE B1.spread1 <= B2.spread1 - ${threshold};`,
 const player_search = async function (req, res) {
   const rawName = (req.query.name || '').trim();
   if (rawName.length < 2) {
-    return res
-      .status(400)
-      .json({ error: 'Player search requires at least 2 characters.' });
+    return res.json([]);
   }
 
   const page = parseInt(req.query["page"]) || 1;
@@ -652,11 +571,7 @@ const player_search = async function (req, res) {
           .json({ error: 'Failed to fetch player search results.' });
       }
 
-      if (!data || data.length === 0) {
-        return res.status(404).json({ message: 'No players found.' });
-      }
-
-      res.json(data);
+      return res.json(data || []);
     }
   );
 };
@@ -668,13 +583,7 @@ const team_search = async function (req, res) {
     `SELECT * FROM teams
          WHERE UPPER(name) LIKE UPPER('%${substring}%')
             OR UPPER(abbreviation) LIKE UPPER('%${substring}%');`,
-    (err, data) => {
-      if (err || data.length === 0) {
-        console.log(err);
-      } else {
-        res.json(data);
-      }
-    }
+    (err, data) => sendQueryResult(res, err, data, [])
   );
 };
 
@@ -745,14 +654,7 @@ const trivia_top_matchups = async function(req, res) {
   WHERE total_games >= ${req.query.minimum_games}
  ORDER BY avg_pct_pts DESC
  LIMIT 15;
-  `, (err, data) => {
-    if (err || data.length == 0) {
-      console.log(err);
-      res.json({});
-    } else {
-      res.json(data);
-    }
-  }
+  `, (err, data) => sendQueryResult(res, err, data, [])
   );
 }
 
@@ -770,15 +672,9 @@ WHERE 1 / IF(B1.spread_price1 < 0, 1 + 100 / ABS(B1.spread_price1), B1.spread_pr
   + 1 / IF(B2.spread_price2 < 0, 1 + 100 / ABS(B2.spread_price2), B2.spread_price2 / 100 + 1) < 1
   ORDER BY arbitrage_percentage
   LIMIT ? OFFSET ?;`, [resultsPerPage, offset],
-  (err, data) => {
-    if (err || data.length == 0) {
-      console.log(err);
-      res.json({});
-    } else {
-      res.json(data);
-    }
-  })
-} 
+  (err, data) => sendQueryResult(res, err, data, [])
+  )
+}
 
 // Return the top players in terms of meeting their spreads, with a filter of the minimum number of games to consider when finding this (for consistency measurement)
 const trivia_spread_players = async function(req, res) {
@@ -813,14 +709,8 @@ const trivia_spread_players = async function(req, res) {
     JOIN players P ON TG.player_id = P.person_id
  ORDER BY spread_percentage DESC
  LIMIT 15`, 
-  (err, data) => {
-    if (err || data.length == 0) {
-      console.log(err);
-      res.json({});
-    } else {
-      res.json(data);
-    }
-  })
+  (err, data) => sendQueryResult(res, err, data, [])
+  )
 }
 
 // Return the top players in terms of their money opportunity per game where they are underdogs (essentially, underdog returns for players)
@@ -853,15 +743,9 @@ const trivia_underdog_players = async function(req, res) {
   ) P ON P.player_id = P2.person_id
   ORDER BY money_per_game DESC
   LIMIT 15;
-  `, 
-  (err, data) => {
-    if (err || data.length == 0) {
-      console.log(err);
-      res.json({});
-    } else {
-      res.json(data);
-    }
-  })
+  `,
+  (err, data) => sendQueryResult(res, err, data, [])
+  )
 }
 
 module.exports = {
