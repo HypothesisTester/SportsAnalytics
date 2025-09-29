@@ -99,7 +99,7 @@ const games_for_team = async function (req, res) {
     `
         SELECT G.game_id, G.matchup, G.game_date, G.team_id, G.a_team_id
         FROM game_data G
-        WHERE team_id = ${req.params.team_id}
+        WHERE G.team_id = ${req.params.team_id}
         ORDER BY G.game_date;
     `,
     (err, data) => {
@@ -500,7 +500,7 @@ const team_top_players = async function (req, res) {
 )
 SELECT player_id, display_first_last, avg_pts, avg_ast, avg_reb, avg_pts + avg_ast + avg_reb AS avg_PRA, avg_stl, avg_blk, avg_min
 FROM players P JOIN player_stats_avg PSA on P.person_id = PSA.player_id
-WHERE team_id = ${team_id}
+WHERE PSA.team_id = ${team_id}
 ORDER BY avg_PRA DESC
 LIMIT ${num_players}`,
     (err, data) => {
@@ -594,24 +594,69 @@ WHERE B1.spread1 <= B2.spread1 - ${threshold};`,
 
 // Search for players (with optional parameters for filtering)
 const player_search = async function (req, res) {
-  let name_substring = req.query.name;
-  let page = parseInt(req.query["page"]) || 1;
-  let resultsPerPage = 20;
-  let offset = (page - 1) * resultsPerPage;
+  const rawName = (req.query.name || '').trim();
+  if (rawName.length < 2) {
+    return res
+      .status(400)
+      .json({ error: 'Player search requires at least 2 characters.' });
+  }
+
+  const page = parseInt(req.query["page"]) || 1;
+  const resultsPerPage = 20;
+  const offset = (page - 1) * resultsPerPage;
+  const likeParam = `%${rawName}%`;
+
   connection.query(
-    `SELECT person_id, display_first_last, from_year, to_year, draft_year, height_feet, height_inches, weight, team_id, jersey, school, country, AVG(fgm) as fgm, AVG(fga) as fga, avg(fg_pct) as fg_pct, avg(fg3m) as fg3m, avg(fg3a) as fg3a, avg(fg_pct) as fg3_pct, avg(ftm) as ftm, AVG(fta) as fta, avg(ft_pct) as ft_pct, avg(oreb) as oreb, avg(dreb) as dreb, avg(reb) as reb, avg(ast) as ast, avg(stl) as stl, avg(blk) as blk, avg(tov) as tov, avg(pf) as pf, avg(pts) as pts, AVG(min) as min
-FROM player_stats ps
-    JOIN players p on ps.player_id = p.person_id
-WHERE LOWER(p.display_first_last) LIKE LOWER('%${name_substring}%')
-GROUP BY p.person_id
-LIMIT ? OFFSET ?;`,
-[resultsPerPage, offset],
+    `SELECT p.person_id,
+            p.display_first_last,
+            p.from_year,
+            p.to_year,
+            p.draft_year,
+            p.height_feet,
+            p.height_inches,
+            p.weight,
+            p.team_id AS team_id,
+            p.jersey,
+            p.school,
+            p.country,
+            AVG(ps.fgm) AS fgm,
+            AVG(ps.fga) AS fga,
+            AVG(ps.fg_pct) AS fg_pct,
+            AVG(ps.fg3m) AS fg3m,
+            AVG(ps.fg3a) AS fg3a,
+            AVG(ps.fg3_pct) AS fg3_pct,
+            AVG(ps.ftm) AS ftm,
+            AVG(ps.fta) AS fta,
+            AVG(ps.ft_pct) AS ft_pct,
+            AVG(ps.oreb) AS oreb,
+            AVG(ps.dreb) AS dreb,
+            AVG(ps.reb) AS reb,
+            AVG(ps.ast) AS ast,
+            AVG(ps.stl) AS stl,
+            AVG(ps.blk) AS blk,
+            AVG(ps.tov) AS tov,
+            AVG(ps.pf) AS pf,
+            AVG(ps.pts) AS pts,
+            AVG(ps.min) AS min
+     FROM player_stats ps
+     JOIN players p ON ps.player_id = p.person_id
+     WHERE p.display_first_last LIKE ?
+     GROUP BY p.person_id
+     LIMIT ? OFFSET ?;`,
+    [likeParam, resultsPerPage, offset],
     (err, data) => {
-      if (err || data.length === 0) {
+      if (err) {
         console.log(err);
-      } else {
-        res.json(data);
+        return res
+          .status(500)
+          .json({ error: 'Failed to fetch player search results.' });
       }
+
+      if (!data || data.length === 0) {
+        return res.status(404).json({ message: 'No players found.' });
+      }
+
+      res.json(data);
     }
   );
 };
