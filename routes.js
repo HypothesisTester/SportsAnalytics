@@ -662,10 +662,14 @@ LIMIT ? OFFSET ?;`,
 const trivia_top_matchups = async function(req, res) {
   connection.query(
 `
-  SELECT * FROM topmatchups
+  SELECT player1 AS name1,
+         player2 AS name2,
+         total_games,
+         avg_pct_pts
+  FROM topmatchups
   WHERE total_games >= ${req.query.minimum_games}
- ORDER BY avg_pct_pts DESC
- LIMIT 15;
+  ORDER BY avg_pct_pts DESC
+  LIMIT 15;
   `, (err, data) => sendQueryResult(res, err, data, [])
   );
 }
