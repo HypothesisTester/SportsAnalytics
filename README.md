@@ -13,8 +13,6 @@ A streamlined web app that blends betting markets with on-court performance to s
 - Cleans and harmonizes the feeds before loading a five-table MySQL warehouse.
 - Models the schema to Third Normal Form, isolating lookup tables for players and teams to avoid redundant attributes.
 
-![Database Tables](docs/database-schema.png)
-
 ## Data Cleaning
 - Synced season coverage across files and appended the official team names missing from the raw exports.
 - Folded separate moneyline, spread, and totals feeds into a single betting fact table.
@@ -25,8 +23,6 @@ A streamlined web app that blends betting markets with on-court performance to s
 - Standardized team names and IDs, reconciling aliases into canonical entries.
 - Resolved player duplicates with birthdates, jersey numbers, and roster context.
 - Normalized date formats, backfilled sparse attributes, and dropped duplicates to protect downstream joins.
-
-![Entity Resolution Diagram](docs/entity-resolution.png)
 
 ## Complex Queries
 `routes.js` carries the heavier analytical endpoints. The `player_spread_performance` route (`routes.js:214`) layers CTEs to pre-aggregate coverage results, while `matchup_stats` (`routes.js:255`) stitches head-to-head splits, betting lines, and bankroll outcomes. Breaking the logic into CTE blocks reduced repetition, clarified intent, and simplified tuning.
