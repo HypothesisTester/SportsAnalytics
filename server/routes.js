@@ -168,43 +168,36 @@ const matchup_top_pairs = (req, res) => {
   )(req, res);
 };
 
-// GET /game/search — games filtered by either team's name, total points and
-// season; 20 per page, newest first. Each game once, from the home side where
-// both sides match.
+// GET /game/search — games filtered by home team, away team (name or
+// abbreviation), total points and season; 20 per page, newest first.
 const game_search = async (req, res) => {
-  const team1 = req.query['name-or-abbreviation1'] ? String(req.query['name-or-abbreviation1']) : null;
-  const team2 = req.query['name-or-abbreviation2'] ? String(req.query['name-or-abbreviation2']) : null;
+  const home = req.query['name-or-abbreviation1'] ? String(req.query['name-or-abbreviation1']) : null;
+  const away = req.query['name-or-abbreviation2'] ? String(req.query['name-or-abbreviation2']) : null;
   const minPts = num(req.query['min-pts']);
   const minYear = num(req.query['min-year']);
   const maxYear = num(req.query['max-year']);
   const perPage = 20;
   const like = s => `%${s}%`;
   const [rows] = await pool.query(
-    `WITH matches AS (
-        SELECT g1.game_id, g1.team_id AS home_team_id, g1.a_team_id AS away_team_id,
-               t.name AS home_team_name, t2.name AS away_team_name,
-               t.abbreviation AS home_team_abbreviation, t2.abbreviation AS away_team_abbreviation,
-               g1.pts AS home_team_pts, g2.pts AS away_team_pts, g1.season_year AS season_year, g1.game_date,
-               ROW_NUMBER() OVER (PARTITION BY g1.game_id ORDER BY g1.is_home DESC) AS side
-        FROM game_data g1
-        JOIN game_data g2 ON g1.a_team_id = g2.team_id AND g1.game_id = g2.game_id
-        JOIN teams t ON g1.team_id = t.team_id
-        JOIN teams t2 ON g2.team_id = t2.team_id
-        WHERE (? IS NULL OR t.name LIKE ? OR t.abbreviation LIKE ?)
-          AND (? IS NULL OR t2.name LIKE ? OR t2.abbreviation LIKE ?)
-          AND (g1.pts + g2.pts) >= COALESCE(?, 0)
-          AND (? IS NULL OR g1.season_year >= ?)
-          AND (? IS NULL OR g1.season_year <= ?)
-    )
-    SELECT game_id, home_team_id, away_team_id, home_team_name, away_team_name,
-           home_team_abbreviation, away_team_abbreviation, home_team_pts, away_team_pts, season_year, game_date
-    FROM matches
-    WHERE side = 1
-    ORDER BY game_date DESC, game_id DESC
-    LIMIT ? OFFSET ?`,
+    `SELECT g1.game_id, g1.team_id AS home_team_id, g1.a_team_id AS away_team_id,
+            t.name AS home_team_name, t2.name AS away_team_name,
+            t.abbreviation AS home_team_abbreviation, t2.abbreviation AS away_team_abbreviation,
+            g1.pts AS home_team_pts, g2.pts AS away_team_pts, g1.season_year AS season_year, g1.game_date
+     FROM game_data g1
+     JOIN game_data g2 ON g1.a_team_id = g2.team_id AND g1.game_id = g2.game_id
+     JOIN teams t ON g1.team_id = t.team_id
+     JOIN teams t2 ON g2.team_id = t2.team_id
+     WHERE g1.is_home = 't'
+       AND (? IS NULL OR t.name LIKE ? OR t.abbreviation LIKE ?)
+       AND (? IS NULL OR t2.name LIKE ? OR t2.abbreviation LIKE ?)
+       AND (g1.pts + g2.pts) >= COALESCE(?, 0)
+       AND (? IS NULL OR g1.season_year >= ?)
+       AND (? IS NULL OR g1.season_year <= ?)
+     ORDER BY g1.game_date DESC, g1.game_id DESC
+     LIMIT ? OFFSET ?`,
     [
-      team1, like(team1), like(team1),
-      team2, like(team2), like(team2),
+      home, like(home), like(home),
+      away, like(away), like(away),
       minPts,
       minYear, minYear,
       maxYear, maxYear,
@@ -330,7 +323,7 @@ const player_spread_performance = (req, res) => {
 const team_search = (req, res) => {
   const like = `%${String(req.query['name-or-abbreviation'] ?? '')}%`;
   return sendRows(
-    `SELECT * FROM teams WHERE UPPER(name) LIKE UPPER(?) OR UPPER(abbreviation) LIKE UPPER(?)`,
+    `SELECT * FROM teams WHERE UPPER(name) LIKE UPPER(?) OR UPPER(abbreviation) LIKE UPPER(?) ORDER BY name`,
     [like, like],
   )(req, res);
 };
@@ -485,7 +478,7 @@ const middling_total_betting = (req, res) =>
      FROM betting_data B1 JOIN betting_data B2 ON B1.game_id = B2.game_id
      JOIN game_data G1 ON B1.game_id = G1.game_id AND B1.team_id = G1.team_id
      JOIN game_data G2 ON B1.game_id = G2.game_id AND B1.a_team_id = G2.team_id
-     WHERE B1.total1 <= B2.total1 - ?`,
+     WHERE B1.book_name <> B2.book_name AND B1.total1 <= B2.total1 - ?`,
     req => [num(req.query.threshold, 2)],
     [],
   )(req, res);
@@ -501,13 +494,14 @@ const middling_spread_betting = (req, res) =>
      FROM betting_data B1 JOIN betting_data B2 ON B1.game_id = B2.game_id
      JOIN game_data G1 ON B1.game_id = G1.game_id AND B1.team_id = G1.team_id
      JOIN game_data G2 ON B1.game_id = G2.game_id AND B1.a_team_id = G2.team_id
-     WHERE B1.spread1 <= B2.spread1 - ?`,
+     WHERE B1.book_name <> B2.book_name AND B1.spread1 <= B2.spread1 - ?`,
     req => [num(req.query.threshold, 2)],
     [],
   )(req, res);
 
-// GET /trivia/arbitrage — book pairs whose spread prices sum to under 100%
-// implied probability, 20 per page.
+// GET /trivia/arbitrage — pairs of books whose spread prices sum to under 100%
+// implied probability, 20 per page. Prices outside ±100..300 are data errors in
+// the source (e.g. +856 on a spread) and are left out.
 const trivia_arbitrage = (req, res) =>
   sendRows(
     `SELECT B1.book_name AS book1, B2.book_name AS book2, B1.spread_price1, B2.spread_price2, G.matchup, G.game_date,
@@ -515,7 +509,10 @@ const trivia_arbitrage = (req, res) =>
             + 1 / IF(B2.spread_price2 < 0, 1 + 100 / ABS(B2.spread_price2), B2.spread_price2 / 100 + 1) AS arbitrage_percentage
      FROM betting_data B1 JOIN betting_data B2 ON B1.game_id = B2.game_id
      JOIN game_data G ON B1.game_id = G.game_id AND B1.team_id = G.team_id
-     WHERE 1 / IF(B1.spread_price1 < 0, 1 + 100 / ABS(B1.spread_price1), B1.spread_price1 / 100 + 1)
+     WHERE B1.book_name <> B2.book_name
+       AND ABS(B1.spread_price1) BETWEEN 100 AND 300
+       AND ABS(B2.spread_price2) BETWEEN 100 AND 300
+       AND 1 / IF(B1.spread_price1 < 0, 1 + 100 / ABS(B1.spread_price1), B1.spread_price1 / 100 + 1)
          + 1 / IF(B2.spread_price2 < 0, 1 + 100 / ABS(B2.spread_price2), B2.spread_price2 / 100 + 1) < 1
      ORDER BY arbitrage_percentage, B1.game_id, B1.book_name, B2.book_name
      LIMIT ? OFFSET ?`,

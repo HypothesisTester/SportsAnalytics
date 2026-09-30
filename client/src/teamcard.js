@@ -13,6 +13,7 @@ import {
     HStack,
     Input,
     Button,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios, { spread } from 'axios';
 
@@ -77,7 +78,7 @@ const TeamCard = ({ teamId }) => {
                         <Text fontSize="xl" fontWeight="bold">
                             Team Data
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Name</Th>
@@ -85,8 +86,8 @@ const TeamCard = ({ teamId }) => {
                                     <Th>W</Th>
                                     <Th>L</Th>
                                     <Th>PPG</Th>
-                                    <Th>APG</Th>
                                     <Th>RPG</Th>
+                                    <Th>APG</Th>
                                 </Tr>
                             </Thead>
                             <Tbody>
@@ -102,7 +103,7 @@ const TeamCard = ({ teamId }) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
 
                     <Box w="100%">
@@ -110,7 +111,7 @@ const TeamCard = ({ teamId }) => {
                             Top Players
                         </Text>
                             {/* <Box key={teamIndex}> */}
-                                <Table variant="simple">
+                                <TableContainer w="100%"><Table variant="simple">
                                     <Thead>
                                         <Tr>
                                             <Th>Player Name</Th>
@@ -135,7 +136,7 @@ const TeamCard = ({ teamId }) => {
                                             </Tr>
                                         ))}
                                     </Tbody>
-                                </Table>
+                                </Table></TableContainer>
                             {/* </Box> */}
                     </Box>
 
@@ -143,7 +144,7 @@ const TeamCard = ({ teamId }) => {
                         <Text fontSize="xl" fontWeight="bold">
                             Betting Data
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Book Name</Th>
@@ -162,14 +163,14 @@ const TeamCard = ({ teamId }) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
 
                     <Box w="100%">
                         <Text fontSize="xl" fontWeight="bold">
                             Advanced Betting Stats
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Total Games</Th>
@@ -190,11 +191,11 @@ const TeamCard = ({ teamId }) => {
                                         <Td>{underdogWinData[0].total_games}</Td>
                                         <Td>{underdogWinData[0].count}</Td>
                                         <Td>{`${(underdogWinData[0].percentage * 100).toFixed(1)}%`}</Td>
-                                        <Td>{underdogMoneyData[0].money}</Td>
+                                        <Td>{underdogMoneyData[0].money.toFixed(2)}</Td>
                                         <Td>{underdogMoneyData[0].money_per_game.toFixed(2)}</Td>
                                     </Tr>
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
                 </Box>
             )}

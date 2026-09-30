@@ -13,6 +13,7 @@ import {
   HStack,
   Input,
   Button,
+    TableContainer,
 } from "@chakra-ui/react";
 import axios from "axios";
 
@@ -64,7 +65,7 @@ return (
           <Text fontSize="xl" fontWeight="bold">
             Player Information
           </Text>
-          <Table variant="simple">
+          <TableContainer w="100%"><Table variant="simple">
             <Thead>
               <Tr>
                 <Th>Name</Th>
@@ -80,7 +81,7 @@ return (
               <Tr>
                 <Td>{player.display_first_last || "N/A"}</Td>
                 <Td>
-                  {player.height_feet && player.height_inches
+                  {player.height_feet != null && player.height_inches != null
                     ? player.height_feet + "'" + player.height_inches + '"'
                     : "N/A"}
                 </Td>
@@ -95,14 +96,14 @@ return (
                 <Td>{player.country || "N/A"}</Td>
               </Tr>
             </Tbody>
-          </Table>
+          </Table></TableContainer>
         </Box>
 
         <Box w="100%">
           <Text fontSize="xl" fontWeight="bold">
             Counting Averages
           </Text>
-          <Table variant="simple">
+          <TableContainer w="100%"><Table variant="simple">
             <Thead>
               <Tr>
                 <Th>PTS</Th>
@@ -127,13 +128,13 @@ return (
                 <Td>{player.pf ? player.pf.toFixed(2) : "N/A"}</Td>
               </Tr>
             </Tbody>
-          </Table>
+          </Table></TableContainer>
         </Box>
         <Box w="100%">
           <Text fontSize="xl" fontWeight="bold">
             Shooting Averages
           </Text>
-          <Table variant="simple">
+          <TableContainer w="100%"><Table variant="simple">
             <Thead>
               <Tr>
                 <Th>FG</Th>
@@ -172,12 +173,12 @@ return (
                 </Td>
               </Tr>
             </Tbody>
-          </Table>
+          </Table></TableContainer>
           <Text fontSize="xl" fontWeight="bold">
             Underdog Stats
           </Text>
           {underdogStats ? (
-            <Table variant="simple">
+            <TableContainer w="100%"><Table variant="simple">
               <Thead>
                 <Tr>
                   <Th>Underdog Games</Th>
@@ -190,11 +191,11 @@ return (
                 <Tr>
                   <Td>{underdogStats.total_games || "N/A"}</Td>
                   <Td>{underdogStats.underdog_wins || "N/A"}</Td>
-                  <Td>{underdogStats.total_money || "N/A"}</Td>
-                  <Td>{underdogStats.money_per_game || "N/A"}</Td>
+                  <Td>{underdogStats.total_money != null ? underdogStats.total_money.toFixed(2) : "N/A"}</Td>
+                  <Td>{underdogStats.money_per_game != null ? underdogStats.money_per_game.toFixed(2) : "N/A"}</Td>
                 </Tr>
               </Tbody>
-            </Table>
+            </Table></TableContainer>
           ) : (
             <Text>No underdog stats available</Text>
           )}
@@ -203,7 +204,7 @@ return (
             Spread Stats
           </Text>
           {spreadStats ? (
-            <Table variant="simple">
+            <TableContainer w="100%"><Table variant="simple">
               <Thead>
                 <Tr>
                   <Th>Spread Covers</Th>
@@ -218,7 +219,7 @@ return (
                   <Td>{spreadStats ? (spreadStats.spread_percentage * 100).toFixed(1) : 'N/A'}%</Td>
                 </Tr>
               </Tbody>
-            </Table>
+            </Table></TableContainer>
           ) : (
             <Text>No spread stats available</Text>
           )}

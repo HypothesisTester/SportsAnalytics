@@ -2,7 +2,7 @@
 
 NBA betting analytics: how teams and players performed against the betting lines, and which betting strategies would have paid off.
 
-**Live site: LIVE_URL**
+**Live site: https://sports-analytics-ten.vercel.app**
 
 ## What it shows
 

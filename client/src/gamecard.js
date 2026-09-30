@@ -13,11 +13,18 @@ import {
     HStack,
     Input,
     Button,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import {useLocation, useParams} from "react-router-dom";
 
 // frontend component for specific game card
+// Minutes played arrive as decimal minutes (40.567); show them as 40:34.
+const formatMinutes = (minutes) => {
+    const seconds = Math.round(minutes * 60);
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
 const GameCard = ({ gameId: propGameId}) => {
     const { gameId } = useParams();
     const [localGameId, setLocalGameId] = useState(propGameId || gameId);
@@ -83,7 +90,7 @@ const GameCard = ({ gameId: propGameId}) => {
                         <Text fontSize="xl" fontWeight="bold">
                             Game Data
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Matchup</Th>
@@ -104,7 +111,7 @@ const GameCard = ({ gameId: propGameId}) => {
                                     <Td>{gameData[0].game_date.substring(0, 10)}</Td>
                                 </Tr>
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
 
                     <Box w="100%">
@@ -116,7 +123,7 @@ const GameCard = ({ gameId: propGameId}) => {
                                 <Text fontWeight="bold" color={textColor}>
                                     {teamIndex === 0 ? 'Home Team Players' : 'Away Team Players'}
                                 </Text>
-                                <Table variant="simple">
+                                <TableContainer w="100%"><Table variant="simple">
                                     <Thead>
                                         <Tr>
                                             <Th>Player</Th>
@@ -135,9 +142,15 @@ const GameCard = ({ gameId: propGameId}) => {
                                     </Thead>
                                     <Tbody>
                                         {teamPlayers.map((player, index) => (
+                                            player.min == null ? (
                                             <Tr key={index}>
                                                 <Td>{player.display_first_last}</Td>
-                                                <Td>{player.min}</Td>
+                                                <Td colSpan={11} color="gray.500">Did not play</Td>
+                                            </Tr>
+                                            ) : (
+                                            <Tr key={index}>
+                                                <Td>{player.display_first_last}</Td>
+                                                <Td>{formatMinutes(player.min)}</Td>
                                                 <Td>{player.pts}</Td>
                                                 <Td>{player.reb}</Td>
                                                 <Td>{player.ast}</Td>
@@ -149,6 +162,7 @@ const GameCard = ({ gameId: propGameId}) => {
                                                 <Td>{player.pf}</Td>
                                                 <Td>{player.plus_minus}</Td>
                                             </Tr>
+                                            )
                                         ))}
                                         <Tr>
                                                 <Td><b>{gameData[teamIndex].abbreviation}</b></Td>
@@ -165,7 +179,7 @@ const GameCard = ({ gameId: propGameId}) => {
                                                 <Td></Td>
                                         </Tr>
                                     </Tbody>
-                                </Table>
+                                </Table></TableContainer>
                             </Box>
                         ))}
                     </Box>
@@ -174,7 +188,7 @@ const GameCard = ({ gameId: propGameId}) => {
                         <Text fontSize="xl" fontWeight="bold">
                             Betting Data
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Book Name</Th>
@@ -205,14 +219,14 @@ const GameCard = ({ gameId: propGameId}) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
 
                     <Box w="100%">
                         <Text fontSize="xl" fontWeight="bold">
                             Matchup Stats
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>{team1.name} Wins</Th>
@@ -241,13 +255,13 @@ const GameCard = ({ gameId: propGameId}) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
                     <Box w="100%">
                         <Text fontSize="xl" fontWeight="bold">
                             Advanced Matchup Stats
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Spread Covers {team1.name}</Th>
@@ -270,13 +284,13 @@ const GameCard = ({ gameId: propGameId}) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
                     <Box w="100%">
                         <Text fontSize="xl" fontWeight="bold">
                             Top Player Matchups
                         </Text>
-                        <Table variant="simple">
+                        <TableContainer w="100%"><Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>{team1.name} Player</Th>
@@ -295,7 +309,7 @@ const GameCard = ({ gameId: propGameId}) => {
                                     </Tr>
                                 ))}
                             </Tbody>
-                        </Table>
+                        </Table></TableContainer>
                     </Box>
                 </Box>
             )}

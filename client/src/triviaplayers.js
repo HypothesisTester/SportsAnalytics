@@ -10,7 +10,8 @@ import {
     FormControl,
     FormLabel,
     useToast, Tbody, Table, Thead, Th, Tr, Td, Flex, Center,
-    useColorModeValue
+    useColorModeValue,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios from 'axios';
 
@@ -115,13 +116,13 @@ const TriviaPlayersPage = () => {
     };
 
     return (
-        <Flex direction="row">
+        <Flex direction="column" width="100%">
         <VStack spacing={6}>
             <Text fontSize="xl" fontWeight="bold">
             Top Player Matchups
           </Text>
           <form onSubmit={handleSubmit2}>
-          <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={2} alignItems="center">
             <FormLabel><b>Minimum Matchup Games</b></FormLabel>
                 <FormControl>
                     <Input
@@ -134,7 +135,7 @@ const TriviaPlayersPage = () => {
                     </Button>
             </Grid>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Player 1</Th>
@@ -153,12 +154,12 @@ const TriviaPlayersPage = () => {
                                     </Tr>
                                 ))}
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
             <Text fontSize="xl" fontWeight="bold">
             Top Players for Spread Cover
           </Text>
           <form onSubmit={handleSubmit}>
-            <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={2} alignItems="center">
             <FormLabel><b>Minimum Total Games</b></FormLabel>
                 <FormControl>
                     <Input
@@ -171,7 +172,7 @@ const TriviaPlayersPage = () => {
                     </Button>
             </Grid>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Player</Th>
@@ -190,12 +191,12 @@ const TriviaPlayersPage = () => {
                                     </Tr>
                                 ))}
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
             <Text fontSize="xl" fontWeight="bold">
             Top Players as Underdogs
           </Text>
           <form onSubmit={handleSubmit3}>
-          <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={2} alignItems="center">
             <FormLabel><b>Minimum Underdog Games</b></FormLabel>
                 <FormControl>
                     <Input
@@ -208,7 +209,7 @@ const TriviaPlayersPage = () => {
                     </Button>
             </Grid>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Player</Th>
@@ -229,7 +230,7 @@ const TriviaPlayersPage = () => {
                                     </Tr>
                                 ))}
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
         </VStack>
         </Flex>
     );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     VStack,
     Heading,
@@ -10,7 +10,8 @@ import {
     FormControl,
     FormLabel,
     useToast, Tbody, Table, Thead, Th, Tr, Td, Flex, Center,
-    useColorModeValue
+    useColorModeValue,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import TeamCard from './teamcard';
@@ -19,23 +20,28 @@ import TeamCard from './teamcard';
 const TeamPage = () => {
     const [teamData, setTeamData] = useState(null);
     const [teamName, setTeamName] = useState('');
-    const [page, setPage] = useState(1);
     const [selectedTeamId, setSelectedTeamId] = useState(null);
+  // On narrow screens the details sit below the list, so bring them into view
+  // when a row is chosen; otherwise the tap looks like it did nothing.
+  const detailsRef = useRef(null);
+  useEffect(() => {
+    if (selectedTeamId && detailsRef.current && window.innerWidth < 1280) {
+      detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedTeamId]);
     const hoverBgColor = useColorModeValue('gray.200', 'gray.700');
 
 
     const toast = useToast();
 
     // handles a search on player name
-    const handleSearch = async (page = 1) => {
+    const handleSearch = async (name = teamName) => {
         try {
 
-            const queryParams = {
-                'page': page,
-            };
+            const queryParams = {};
 
-            if (teamName) {
-                queryParams['name-or-abbreviation'] = teamName;
+            if (name) {
+                queryParams['name-or-abbreviation'] = name;
             } else {
                 queryParams['name-or-abbreviation'] = '';
             }
@@ -45,7 +51,6 @@ const TeamPage = () => {
                 params: queryParams,
             });
             setTeamData(response.data);
-            setPage(page);
         } catch (error) {
             console.log(error);
             toast({
@@ -60,18 +65,8 @@ const TeamPage = () => {
 
 
     useEffect(() => {
-        handleSearch(1);
+        handleSearch();
     }, []);
-
-    const handlePrevPage = () => {
-        if (page > 1) {
-            handleSearch(page - 1);
-        }
-    };
-
-    const handleNextPage = () => {
-        handleSearch(page + 1);
-    };
 
     const handleTeamClick = (teamId) => {
         console.log('Team clicked:', teamId);
@@ -80,7 +75,7 @@ const TeamPage = () => {
 
     const handleReset = () => {
         setTeamName('');
-        handleSearch();
+        handleSearch('');
     };
 
     const handleSubmit = (event) => {
@@ -89,10 +84,10 @@ const TeamPage = () => {
     };
 
     return (
-        <Flex direction="row">
-        <VStack spacing={6}>
+        <Flex direction={{ base: "column", xl: "row" }} width="100%" gap={6} align="start">
+        <VStack spacing={6} width={{ base: "100%", xl: "30%" }} flexShrink={0}>
             <form onSubmit={handleSubmit}>
-            <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
                 <FormControl>
                     <FormLabel>Team</FormLabel>
                     <Input
@@ -110,7 +105,7 @@ const TeamPage = () => {
                     </Button>
                 </Center>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Team Name</Th>
@@ -131,18 +126,9 @@ const TeamPage = () => {
                             </Tr>
                         ))}
                 </Tbody>
-            </Table>
-            <Flex mt={6} justifyContent="space-between" width="100%">
-                <Button onClick={handlePrevPage} disabled={page <= 1}>
-                    Previous
-                </Button>
-                <Text fontWeight="bold">Page {page}</Text>
-                <Button onClick={handleNextPage}>
-                    Next
-                </Button>
-            </Flex>
+            </Table></TableContainer>
         </VStack>
-            <Box p={6}>
+            <Box flex="1" width="100%" minW={0} ref={detailsRef} scrollMarginTop={4}>
                 <TeamCard teamId={selectedTeamId} />
             </Box>
         </Flex>

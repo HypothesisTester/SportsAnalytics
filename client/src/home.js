@@ -9,9 +9,8 @@ import {
     Tab,
     TabPanel,
     Container,
-    VStack,
     useColorModeValue,
-    extendTheme, Center,
+    extendTheme,
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { ChakraProvider } from '@chakra-ui/react';
@@ -67,48 +66,47 @@ const HomePage = () => {
         <ChakraProvider theme={theme}>
             <ColorModeScript initialColorMode="light" />
             <ColorModeSwitcher />
-            <Center>
-            <Container maxW="100%" py={12}>
-                <Center>
-                    <VStack>
-                <Box pos="relative" display="inline-block" p={6}>
-                    <Heading as="h1" size="2xl" background={titleGradient} color="transparent" backgroundClip="text">
-                        Basketball Betting Statistics
-                    </Heading>
-                </Box>
-                <VStack spacing={16} align="start" width="100%" >
-                    <Tabs mt={4}>
-                        <TabList>
-                            <Tab>Game</Tab>
-                            <Tab>Player</Tab>
-                            <Tab>Team</Tab>
-                            <Tab>Betting Trivia</Tab>
-                            <Tab>Player Trivia</Tab>
-                        </TabList>
+            <Container maxW="7xl" px={{ base: 3, md: 6 }} py={{ base: 8, md: 12 }}>
+                <Heading
+                    as="h1"
+                    size={{ base: 'xl', md: '2xl' }}
+                    textAlign="center"
+                    pb={6}
+                    background={titleGradient}
+                    color="transparent"
+                    backgroundClip="text"
+                >
+                    Basketball Betting Statistics
+                </Heading>
+                {/* Tabs mount when first opened, so the page doesn't query every tab on load. */}
+                <Tabs mt={4} isLazy lazyBehavior="keepMounted">
+                    <TabList overflowX="auto" overflowY="hidden" whiteSpace="nowrap">
+                        <Tab>Game</Tab>
+                        <Tab>Player</Tab>
+                        <Tab>Team</Tab>
+                        <Tab>Betting Trivia</Tab>
+                        <Tab>Player Trivia</Tab>
+                    </TabList>
 
-                        <TabPanels>
-                            <TabPanel>
-                                <GamePage />
-                            </TabPanel>
-                            <TabPanel>
-                                <PlayerPage />
-                            </TabPanel>
-                            <TabPanel>
-                                <TeamPage />
-                            </TabPanel>
-                            <TabPanel>
-                                <TriviaPage />
-                            </TabPanel>
-                            <TabPanel>
-                                <TriviaPlayersPage />
-                            </TabPanel>
-                        </TabPanels>
-                    </Tabs>
-                </VStack>
-                    </VStack>
-                </Center>
+                    <TabPanels>
+                        <TabPanel px={{ base: 0, md: 4 }}>
+                            <GamePage />
+                        </TabPanel>
+                        <TabPanel px={{ base: 0, md: 4 }}>
+                            <PlayerPage />
+                        </TabPanel>
+                        <TabPanel px={{ base: 0, md: 4 }}>
+                            <TeamPage />
+                        </TabPanel>
+                        <TabPanel px={{ base: 0, md: 4 }}>
+                            <TriviaPage />
+                        </TabPanel>
+                        <TabPanel px={{ base: 0, md: 4 }}>
+                            <TriviaPlayersPage />
+                        </TabPanel>
+                    </TabPanels>
+                </Tabs>
             </Container>
-            </Center>
         </ChakraProvider>
     );
 };
