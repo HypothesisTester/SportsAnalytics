@@ -177,10 +177,10 @@ const TriviaPage = () => {
                 </Tbody>
                 </Table></TableContainer>
             <Center mt={4}>
-                <Button onClick={handlePrevPage} disabled={page === 1} mr={4}>
+                <Button onClick={handlePrevPage} isDisabled={page === 1 || arbitrageLoading} mr={4}>
                     Previous
                 </Button>
-                <Button onClick={handleNextPage}>
+                <Button onClick={handleNextPage} isDisabled={arbitrageLoading || arbitrage.length < 20}>
                     Next
                 </Button>
             </Center>

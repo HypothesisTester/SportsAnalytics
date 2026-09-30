@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     VStack,
     Heading,
@@ -27,6 +27,14 @@ const GamePage = () => {
     const [maxYear, setMaxYear] = useState('');
     const [page, setPage] = useState(1);
     const [selectedGameId, setSelectedGameId] = useState(null);
+  // On narrow screens the details sit below the list, so bring them into view
+  // when a row is chosen; otherwise the tap looks like it did nothing.
+  const detailsRef = useRef(null);
+  useEffect(() => {
+    if (selectedGameId && detailsRef.current && window.innerWidth < 1280) {
+      detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedGameId]);
     const hoverBgColor = useColorModeValue('gray.200', 'gray.700');
     const gameCardRef = useRef(null);
     const [showUpArrow, setShowUpArrow] = useState(false);
@@ -63,31 +71,34 @@ const GamePage = () => {
     }, []);
 
     // handles search on game via various parameters
-    const handleSearch = async (page = 1) => {
+    const handleSearch = async (
+        page = 1,
+        filters = { team1: team1Substring, team2: team2Substring, minPts, minYear, maxYear },
+    ) => {
         try {
 
             const queryParams = {
                 'page': page,
             };
 
-            if (team1Substring) {
-                queryParams['name-or-abbreviation1'] = team1Substring;
+            if (filters.team1) {
+                queryParams['name-or-abbreviation1'] = filters.team1;
             }
 
-            if (team2Substring) {
-                queryParams['name-or-abbreviation2'] = team2Substring;
+            if (filters.team2) {
+                queryParams['name-or-abbreviation2'] = filters.team2;
             }
 
-            if (minPts) {
-                queryParams['min-pts'] = minPts;
+            if (filters.minPts) {
+                queryParams['min-pts'] = filters.minPts;
             }
 
-            if (minYear) {
-                queryParams['min-year'] = minYear;
+            if (filters.minYear) {
+                queryParams['min-year'] = filters.minYear;
             }
 
-            if (maxYear) {
-                queryParams['max-year'] = maxYear;
+            if (filters.maxYear) {
+                queryParams['max-year'] = filters.maxYear;
             }
 
             console.log(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/game/search`)
@@ -134,7 +145,7 @@ const GamePage = () => {
         setMinPts('');
         setMinYear('');
         setMaxYear('');
-        handleSearch();
+        handleSearch(1, {});
     };
 
     const handleSubmit = (event) => {
@@ -222,15 +233,15 @@ const GamePage = () => {
                 </Tbody>
             </Table></TableContainer>
             <Flex mt={6} justifyContent="space-between" width="100%">
-                <Button onClick={handlePrevPage} disabled={page <= 1}>
+                <Button onClick={handlePrevPage} isDisabled={page <= 1}>
                     Previous
                 </Button>
                 <Text fontWeight="bold">Page {page}</Text>
-                <Button onClick={handleNextPage}>
+                <Button onClick={handleNextPage} isDisabled={!gameData || gameData.length < 20}>
                     Next
                 </Button>
             </Flex>
-            <Box flex="1" width="100%" minW={0}>
+            <Box flex="1" width="100%" minW={0} ref={detailsRef} scrollMarginTop={4}>
                 <div ref={gameCardRef}>
                     <GameCard gameId={selectedGameId} />
                 </div>

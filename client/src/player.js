@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   VStack,
   Heading,
@@ -30,19 +30,27 @@ const PlayerPage = () => {
   const [playerName, setPlayerName] = useState("");
   const [page, setPage] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  // On narrow screens the details sit below the list, so bring them into view
+  // when a row is chosen; otherwise the tap looks like it did nothing.
+  const detailsRef = useRef(null);
+  useEffect(() => {
+    if (selectedPlayer && detailsRef.current && window.innerWidth < 1280) {
+      detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedPlayer]);
   const hoverBgColor = useColorModeValue("gray.200", "gray.700");
 
   const toast = useToast();
 
   // handles a search on player name
-  const handleSearch = async (page = 1) => {
+  const handleSearch = async (page = 1, name = playerName) => {
     try {
       const queryParams = {
         page: page,
       };
 
-      if (playerName) {
-        queryParams["name"] = playerName;
+      if (name) {
+        queryParams["name"] = name;
       } else {
         queryParams["name"] = '';
       }
@@ -102,7 +110,7 @@ const PlayerPage = () => {
   */
   const handleReset = () => {
     setPlayerName("");
-    handleSearch();
+    handleSearch(1, "");
   };
 
   /*
@@ -161,14 +169,14 @@ const PlayerPage = () => {
           </Tbody>
         </Table></TableContainer>
         <Flex mt={6} justifyContent="space-between" width="100%">
-          <Button onClick={handlePrevPage} disabled={page <= 1}>
+          <Button onClick={handlePrevPage} isDisabled={page <= 1}>
             Previous
           </Button>
           <Text fontWeight="bold">Page {page}</Text>
-          <Button onClick={handleNextPage}>Next</Button>
+          <Button onClick={handleNextPage} isDisabled={!playerData || playerData.length < 20}>Next</Button>
         </Flex>
       </VStack>
-      <Box flex="1" width="100%" minW={0}>
+      <Box flex="1" width="100%" minW={0} ref={detailsRef} scrollMarginTop={4}>
         <PlayerCard player={selectedPlayer} />
       </Box>
     </Flex>
