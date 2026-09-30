@@ -9,8 +9,60 @@
     <meta name="theme-color" content="#0c1120" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Twelve NBA seasons against the betting lines: every game, team and player from 2006–07 to 2017–18 compared with the spreads, totals and moneylines of 10 sportsbooks." />
     <title>SportsAnalytics: NBA results against the betting lines</title>
+    <link rel="preload" href="%PUBLIC_URL%/fonts/archivo-latin-wdth-v1.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      /* Archivo, SIL Open Font License (fonts/LICENSE-Archivo.txt). */
+      @font-face {
+        font-family: 'Archivo Variable';
+        font-style: normal;
+        font-display: swap;
+        font-weight: 100 900;
+        font-stretch: 62% 125%;
+        src: url('%PUBLIC_URL%/fonts/archivo-latin-wdth-v1.woff2') format('woff2-variations');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+          U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Archivo Variable';
+        font-style: normal;
+        font-display: swap;
+        font-weight: 100 900;
+        font-stretch: 62% 125%;
+        src: url('%PUBLIC_URL%/fonts/archivo-latin-ext-wdth-v1.woff2') format('woff2-variations');
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+          U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+    </style>
     <script>
       try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+      // Start the first page's API requests now, instead of after the app's
+      // JavaScript has loaded; src/api.js picks them up. The lists must match
+      // the requests the views make.
+      (function () {
+        var early = (window.__early = {});
+        var get = function (u) { return early[u] || (early[u] = fetch(u)); };
+        var game = function (id) { ['', '/betting', '/players'].forEach(function (x) { get('/api/game/' + id + x); }); };
+        var p = location.pathname, m;
+        if (p === '/') {
+          get('/api/team/search');
+          get('/api/game/search?page=1').then(function (r) { return r.clone().json(); }).then(function (rows) {
+            if (window.matchMedia('(min-width: 1024px)').matches && rows[0]) game(rows[0].game_id);
+          }).catch(function () {});
+        } else if ((m = p.match(/^\/games\/(\d+)$/))) {
+          game(m[1]);
+          get('/api/team/search');
+          get('/api/game/search?page=1');
+        } else if ((m = p.match(/^\/players\/(\d+)$/))) {
+          ['', '/average_stats', '/spread_performance', '/player_underdog'].forEach(function (x) { get('/api/player/' + m[1] + x); });
+        } else if ((m = p.match(/^\/teams\/(\d+)$/))) {
+          ['', '/top_players?num_players=15', '/betting', '/spread_cover', '/underdog_wins', '/underdog_money']
+            .forEach(function (x) { get('/api/team/' + m[1] + x); });
+          get('/api/team/search');
+        } else if (p === '/teams') {
+          get('/api/team/search');
+        }
+      })();
     </script>
   </head>
   <body>

@@ -16,7 +16,10 @@ const urlFor = (path, params) => {
 export function getJSON(path, params) {
   const url = urlFor(path, params);
   if (!pending.has(url)) {
-    const request = fetch(url).then(async res => {
+    // index.html may already have started this request while the app loaded.
+    const early = window.__early && window.__early[url];
+    if (early) delete window.__early[url];
+    const request = (early || fetch(url)).then(async res => {
       // Searches answer 404 when nothing matches, and a missing game is a 404 too.
       if (res.status === 404) return [];
       if (!res.ok) throw new Error(`The server answered ${res.status}.`);
@@ -26,6 +29,11 @@ export function getJSON(path, params) {
     pending.set(url, request);
   }
   return pending.get(url);
+}
+
+/** Start loading resources a view is about to need; failures are left for the view. */
+export function prefetch(paths) {
+  paths.forEach(path => getJSON(path).catch(() => {}));
 }
 
 /**

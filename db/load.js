@@ -2,6 +2,9 @@
 //
 //   DATABASE_URL='mysql://user:password@host:4000/sports_betting' node db/load.js
 //
+// With --derived, only the derived tables are rebuilt from the loaded data
+// (after a change to db/derived.sql); the six source tables are left alone.
+//
 // Safe to re-run: the tables are recreated and reloaded each time. Connections use
 // TLS unless DB_SSL=false (for a local MySQL). With APP_DB_PASSWORD set, it
 // also creates the read-only user the website connects as (see README).
@@ -67,8 +70,22 @@ async function main() {
   const db = await mysql.createConnection({ ...options, multipleStatements: true });
   await db.query(`CREATE DATABASE IF NOT EXISTS ${database}`);
   await db.query(`USE ${database}`);
-  // A full reload: recreate every table, so schema changes take effect.
   const derived = ['player_averages', 'player_spread_totals', 'player_underdog_totals'];
+  if (process.argv.includes('--derived')) {
+    await db.query(`DROP TABLE IF EXISTS ${derived.join(', ')}`);
+    // schema.sql uses CREATE TABLE IF NOT EXISTS, so only the dropped tables are made.
+    await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+    console.log(`Rebuilding derived tables in ${options.host}/${database}...`);
+    await db.query(fs.readFileSync(path.join(__dirname, 'derived.sql'), 'utf8'));
+    for (const t of derived) {
+      const [[{ n }]] = await db.query(`SELECT COUNT(*) AS n FROM ${t}`);
+      console.log(`  ${t}: ${n.toLocaleString()} rows`);
+    }
+    await db.end();
+    console.log('Done.');
+    return;
+  }
+  // A full reload: recreate every table, so schema changes take effect.
   await db.query(`DROP TABLE IF EXISTS ${[...TABLES.map(([t]) => t), ...derived].join(', ')}`);
   await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
   console.log(`Loading into ${options.host}/${database}`);

@@ -8,10 +8,11 @@ app.disable('x-powered-by');
 const api = express.Router();
 
 // The data only changes when it is reloaded, so browsers may reuse a response
-// for 5 minutes and Vercel's CDN for a day (a new deployment starts empty).
+// for an hour and Vercel's CDN for a week, serving a stale copy for another day
+// while it refreshes. A new deployment starts with an empty CDN cache.
 api.use((req, res, next) => {
-  res.set('Cache-Control', 'public, max-age=300');
-  res.set('Vercel-CDN-Cache-Control', 'public, max-age=86400');
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.set('Vercel-CDN-Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
   next();
 });
 
@@ -19,8 +20,11 @@ api.get('/game/search', routes.game_search);
 api.get('/game/:game_id', routes.game);
 api.get('/game/:game_id/players', routes.game_players);
 api.get('/game/:game_id/betting', routes.game_betting);
-api.get('/game/:game_id/matchup_stats', routes.matchup_stats);
-api.get('/game/:game_id/matchup_top_pairs', routes.matchup_top_pairs);
+
+// Head to head depends only on the two teams, so it is keyed by the pair: every
+// game between them shares one cached response.
+api.get('/matchup/:team_a/:team_b', routes.matchup_stats);
+api.get('/matchup/:team_a/:team_b/pairs', routes.matchup_top_pairs);
 
 api.get('/player/search', routes.player_search);
 api.get('/player/:player_id', routes.player_information);
