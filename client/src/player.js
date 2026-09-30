@@ -29,7 +29,6 @@ const PlayerPage = () => {
   const [playerName, setPlayerName] = useState("");
   const [page, setPage] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [playerUnderdog, setPlayerUnderdog] = useState([]);
   const hoverBgColor = useColorModeValue("gray.200", "gray.700");
 
   const toast = useToast();
@@ -95,9 +94,6 @@ const PlayerPage = () => {
     console.log(curPlayer);
     setSelectedPlayer(curPlayer);
 
-    console.log(`/player/${curPlayer}/underdog_money`)
-    const underdogMoneyRes = axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/player/${curPlayer}/underdog_money`);
-    setPlayerUnderdog(underdogMoneyRes.data);
   };
 
   /*
