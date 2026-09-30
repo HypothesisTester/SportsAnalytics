@@ -63,6 +63,12 @@ const GameCard = ({ gameId: propGameId}) => {
         fetchData();
     }, [localGameId]);
 
+    // The matchup queries report "team1" and "team2" as the two teams ordered by
+    // team id (over all their meetings, home and away), so label them by name.
+    const [team1, team2] = gameData && gameData.length === 2
+        ? [...gameData].sort((a, b) => a.team_id - b.team_id)
+        : [{ name: 'Team 1' }, { name: 'Team 2' }];
+
     return (
         <Box>
             {localGameId && gameData && gameData[0] && gameData[1] && (
@@ -209,15 +215,15 @@ const GameCard = ({ gameId: propGameId}) => {
                         <Table variant="simple">
                             <Thead>
                                 <Tr>
-                                    <Th>Home Team Wins</Th>
-                                    <Th>Away Team Wins</Th>
-                                    <Th>Home Team Average Points</Th>
-                                    <Th>Away Team Average Points</Th>
-                                    <Th>Average Home Spread</Th>
-                                    <Th>Average Away Spread</Th>
+                                    <Th>{team1.name} Wins</Th>
+                                    <Th>{team2.name} Wins</Th>
+                                    <Th>{team1.name} Average Points</Th>
+                                    <Th>{team2.name} Average Points</Th>
+                                    <Th>Average {team1.name} Spread</Th>
+                                    <Th>Average {team2.name} Spread</Th>
                                     <Th>Average Over/Under</Th>
-                                    <Th>Average Moneyline Price Home</Th>
-                                    <Th>Average Moneyline Price Away</Th>
+                                    <Th>Average Moneyline Price {team1.name}</Th>
+                                    <Th>Average Moneyline Price {team2.name}</Th>
                                 </Tr>
                             </Thead>
                             <Tbody>
@@ -244,12 +250,12 @@ const GameCard = ({ gameId: propGameId}) => {
                         <Table variant="simple">
                             <Thead>
                                 <Tr>
-                                    <Th>Spread Covers Home</Th>
-                                    <Th>Spread Covers Away</Th>
-                                    <Th>Underdog Wins Home</Th>
-                                    <Th>Underdog Wins Away</Th>
-                                    <Th>Underdog Money Home</Th>
-                                    <Th>Underdog Money Away</Th>
+                                    <Th>Spread Covers {team1.name}</Th>
+                                    <Th>Spread Covers {team2.name}</Th>
+                                    <Th>Underdog Wins {team1.name}</Th>
+                                    <Th>Underdog Wins {team2.name}</Th>
+                                    <Th>Underdog Money {team1.name}</Th>
+                                    <Th>Underdog Money {team2.name}</Th>
                                 </Tr>
                             </Thead>
                             <Tbody>
@@ -273,8 +279,8 @@ const GameCard = ({ gameId: propGameId}) => {
                         <Table variant="simple">
                             <Thead>
                                 <Tr>
-                                    <Th>Home Team Player</Th>
-                                    <Th>Away Team Player</Th>
+                                    <Th>{team1.name} Player</Th>
+                                    <Th>{team2.name} Player</Th>
                                     <Th>Total Games Played</Th>
                                     <Th>Average Percentage of Points Scored</Th>
                                 </Tr>
@@ -282,8 +288,8 @@ const GameCard = ({ gameId: propGameId}) => {
                             <Tbody>
                                 {matchupTopPairs.map((y, index) => (
                                     <Tr key={index}>
-                                        <Td>{y.player1}</Td>
-                                        <Td>{y.player2}</Td>
+                                        <Td>{y.name1}</Td>
+                                        <Td>{y.name2}</Td>
                                         <Td>{y.total_games}</Td>
                                         <Td>{`${(y.avg_pct_pts * 100).toFixed(1)}%`}</Td>
                                     </Tr>

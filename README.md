@@ -1,50 +1,69 @@
-# Sports Betting Analytics
+# SportsAnalytics
 
-A streamlined web app that blends betting markets with on-court performance to surface actionable NBA insights.
+NBA betting analytics: how teams and players performed against the betting lines, and which betting strategies would have paid off.
 
-## Application Stack
-- MySQL on AWS RDS hosts the curated dataset.
-- Node.js with Express powers the REST API defined in `server.js` and `routes.js`.
-- React with Chakra UI delivers the client experience in `client/`.
-- Production runs on Heroku: https://sports-analytics-0875f07019b5.herokuapp.com/
+**Live site: LIVE_URL**
 
-## Data Pipeline
-- Collects seven Kaggle CSVs spanning betting lines, team results, and player box scores.
-- Cleans and harmonizes the feeds before loading a five-table MySQL warehouse.
-- Models the schema to Third Normal Form, isolating lookup tables for players and teams to avoid redundant attributes.
+## What it shows
 
-## Data Cleaning
-- Synced season coverage across files and appended the official team names missing from the raw exports.
-- Folded separate moneyline, spread, and totals feeds into a single betting fact table.
-- Filtered to games present in every source, trimming noisy columns such as `book_id` when the information already lived in `book_name`.
-- Automations live in the Pandas/NumPy notebooks under `data_cleaning/`.
+- **Games**: search 14,906 games (2006–07 to 2017–18) by team, season and total points. Each game has its box score, the lines from 10 sportsbooks, and the two teams' record against each other and against the spread.
+- **Players**: career averages, how often their team covered the spread, and what $100 bets on their team as the underdog would have returned.
+- **Teams**: record, average lines per sportsbook, spread covers and underdog returns.
+- **Trivia**: "middling" opportunities between books, arbitrage between books' spread prices, and the players with the best records against the spread and as underdogs.
 
-## Entity Resolution
-- Standardized team names and IDs, reconciling aliases into canonical entries.
-- Resolved player duplicates with birthdates, jersey numbers, and roster context.
-- Normalized date formats, backfilled sparse attributes, and dropped duplicates to protect downstream joins.
+## Architecture
 
-## Complex Queries
-`routes.js` carries the heavier analytical endpoints. The `player_spread_performance` route (`routes.js:214`) layers CTEs to pre-aggregate coverage results, while `matchup_stats` (`routes.js:255`) stitches head-to-head splits, betting lines, and bankroll outcomes. Breaking the logic into CTE blocks reduced repetition, clarified intent, and simplified tuning.
+```mermaid
+flowchart LR
+    subgraph Offline["Prepared once"]
+        Kaggle["7 Kaggle CSVs"] --> Pandas["pandas notebooks<br/>clean, merge, dedupe"] --> CSV["data/*.csv"]
+        CSV --> Load["db/load.js<br/>schema, bulk insert,<br/>derived tables"]
+    end
+    Load --> DB[("TiDB Cloud<br/>MySQL-compatible")]
+    Browser --> Static["Vercel CDN<br/>React app"]
+    Browser -->|"/api/*"| API["Vercel function<br/>Express, 26 routes"]
+    API -->|"read-only user,<br/>bound parameters"| DB
+```
 
-### Query Optimization
-Our focus stayed on projections and filters rather than indexing gains.
+The React app (Chakra UI) is served as static files. The API is one Express app running as a Vercel serverless function, and Vercel's CDN caches its responses for a day, since the data only changes when it is reloaded.
 
-| Query | Purpose | Original Runtime* | Optimized Runtime* |
-| --- | --- | --- | --- |
-| `player_spread_performance` | Measure how often a player covers the spread with pre-aggregated CTEs | ~3.1 s | ~0.7 s |
-| `matchup_stats` | Surface head-to-head trends, spreads, and bankroll swings via chained CTEs | ~4.4 s | ~1.2 s |
+## Data
 
-\*Timings observed on the AWS RDS dataset after moving heavy filters into CTEs and trimming projections.
+| Table | Rows | Contents |
+|---|---|---|
+| `game_data` | 29,812 | One row per team per game: result and team box score |
+| `player_stats` | 668,628 | One row per player per game: box score |
+| `betting_data` | 125,286 | One row per game per sportsbook: moneyline, spread and total, with prices |
+| `players` | 4,171 | Player details |
+| `teams` | 30 | Team names and abbreviations |
+| `topmatchups` | 495,472 | Precomputed: opposing player pairs and their share of the points |
 
-## Pre-processing Code
-`csv_creation3.ipynb` captures the end-to-end creation of the CSVs consumed by the app.
+`db/schema.sql` defines the tables and indexes. `db/derived.sql` builds three summary tables from them (career averages, and per-player spread and underdog totals), so the pages that used to aggregate all 668,628 player rows on every request read a few thousand rows instead:
 
-## Run Locally
-1. Run `npm install` to install the server dependencies.
-2. Run `npm start` to boot the server.
-3. `cd client` and run `npm install` for the frontend dependencies.
-4. Run `npm start` inside `client/` to launch the React app.
-5. Visit `http://localhost:3000` in your browser.
+| Request (local MySQL 8) | Before | After |
+|---|---|---|
+| Player search, first page | 9.4 s | 25 ms |
+| Players against the spread | 1.7 s | 11 ms |
+| Players as underdogs | 1.5 s | 8 ms |
 
-Or visit the deployed app at https://sports-analytics-0875f07019b5.herokuapp.com/.
+The CSVs are the cleaned output of the notebooks in `data_cleaning/`: team names standardised across sources, duplicate players resolved by birthdate and jersey, the three betting markets merged into one table, and games kept only when every source has them.
+
+## Running locally
+
+Needs Node 20+ and MySQL 8 (or a TiDB Cloud cluster).
+
+```bash
+npm install
+DATABASE_URL='mysql://user:password@localhost:3306/sports_betting' DB_SSL=false npm run load-data
+npm run build
+DATABASE_URL='mysql://user:password@localhost:3306/sports_betting' DB_SSL=false npm start
+```
+
+Then open http://localhost:6100. For frontend development, run `npm start` in `client/` as well; it forwards `/api` to port 6100.
+
+`npm test` checks input validation; with `DATABASE_URL` set it also calls every route.
+
+## Deploying
+
+1. Create a TiDB Cloud Starter cluster (free) and load it: `DATABASE_URL='mysql://<user>:<password>@<host>:4000/sports_betting' APP_DB_PASSWORD='<new password>' npm run load-data`. This also creates the read-only user the site connects as.
+2. Import the repo into Vercel and set `DATABASE_URL` to that read-only user's connection string. `vercel.json` does the rest.
