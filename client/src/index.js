@@ -1,11 +1,17 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import { ChakraProvider } from '@chakra-ui/react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import '@fontsource-variable/archivo/wdth';
+import './styles.css';
 
-ReactDOM.render(
-    <ChakraProvider>
-        <App />
-    </ChakraProvider>,
-    document.getElementById('root')
+// The list/detail views restore their own scroll positions.
+if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>,
 );

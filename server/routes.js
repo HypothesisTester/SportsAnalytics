@@ -173,7 +173,8 @@ const matchup_top_pairs = (req, res) => {
 };
 
 // GET /game/search — games filtered by home team, away team (name or
-// abbreviation), total points and season; 20 per page, newest first.
+// abbreviation), total points and season; 20 per page, newest first. home_spread
+// is the home team's spread averaged over the sportsbooks.
 const game_search = async (req, res) => {
   const home = req.query['name-or-abbreviation1'] ? String(req.query['name-or-abbreviation1']) : null;
   const away = req.query['name-or-abbreviation2'] ? String(req.query['name-or-abbreviation2']) : null;
@@ -186,7 +187,8 @@ const game_search = async (req, res) => {
     `SELECT g1.game_id, g1.team_id AS home_team_id, g1.a_team_id AS away_team_id,
             t.name AS home_team_name, t2.name AS away_team_name,
             t.abbreviation AS home_team_abbreviation, t2.abbreviation AS away_team_abbreviation,
-            g1.pts AS home_team_pts, g2.pts AS away_team_pts, g1.season_year AS season_year, g1.game_date
+            g1.pts AS home_team_pts, g2.pts AS away_team_pts, g1.season_year AS season_year, g1.game_date,
+            (SELECT AVG(b.spread2) FROM betting_data b WHERE b.game_id = g1.game_id) AS home_spread
      FROM game_data g1
      JOIN game_data g2 ON g1.a_team_id = g2.team_id AND g1.game_id = g2.game_id
      JOIN teams t ON g1.team_id = t.team_id
@@ -257,7 +259,8 @@ const player_average_stats = (req, res) =>
     `SELECT AVG(min) AS min, AVG(fgm) AS fgm, AVG(fga) AS fga, AVG(fg_pct) AS fg_pct, AVG(fg3m) AS fg3m,
             AVG(fg3a) AS fg3a, AVG(fg3_pct) AS fg3_pct, AVG(ftm) AS ftm, AVG(fta) AS fta, AVG(ft_pct) AS ft_pct,
             AVG(oreb) AS oreb, AVG(dreb) AS dreb, AVG(reb) AS reb, AVG(ast) AS ast, AVG(stl) AS stl,
-            AVG(blk) AS blk, AVG(tov) AS tov, AVG(pf) AS pf, AVG(pts) AS pts, AVG(plus_minus) AS plus_minus
+            AVG(blk) AS blk, AVG(tov) AS tov, AVG(pf) AS pf, AVG(pts) AS pts, AVG(plus_minus) AS plus_minus,
+            COUNT(*) AS games_played
      FROM player_stats
      WHERE player_id = ?`,
     [id(req.params.player_id)],
