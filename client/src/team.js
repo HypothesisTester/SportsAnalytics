@@ -10,7 +10,8 @@ import {
     FormControl,
     FormLabel,
     useToast, Tbody, Table, Thead, Th, Tr, Td, Flex, Center,
-    useColorModeValue
+    useColorModeValue,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import TeamCard from './teamcard';
@@ -89,10 +90,10 @@ const TeamPage = () => {
     };
 
     return (
-        <Flex direction="row">
-        <VStack spacing={6}>
+        <Flex direction={{ base: "column", xl: "row" }} width="100%" gap={6} align="start">
+        <VStack spacing={6} width={{ base: "100%", xl: "30%" }} flexShrink={0}>
             <form onSubmit={handleSubmit}>
-            <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
                 <FormControl>
                     <FormLabel>Team</FormLabel>
                     <Input
@@ -110,7 +111,7 @@ const TeamPage = () => {
                     </Button>
                 </Center>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Team Name</Th>
@@ -131,7 +132,7 @@ const TeamPage = () => {
                             </Tr>
                         ))}
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
             <Flex mt={6} justifyContent="space-between" width="100%">
                 <Button onClick={handlePrevPage} disabled={page <= 1}>
                     Previous
@@ -142,7 +143,7 @@ const TeamPage = () => {
                 </Button>
             </Flex>
         </VStack>
-            <Box p={6}>
+            <Box flex="1" width="100%" minW={0}>
                 <TeamCard teamId={selectedTeamId} />
             </Box>
         </Flex>

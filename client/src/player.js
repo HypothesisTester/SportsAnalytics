@@ -19,6 +19,7 @@ import {
   Flex,
   Center,
   useColorModeValue,
+    TableContainer,
 } from "@chakra-ui/react";
 import axios from "axios";
 import PlayerCard from "./playercard";
@@ -113,10 +114,10 @@ const PlayerPage = () => {
   };
 
   return (
-    <Flex direction="row">
-      <VStack spacing={6}>
+    <Flex direction={{ base: "column", xl: "row" }} width="100%" gap={6} align="start">
+      <VStack spacing={6} width={{ base: "100%", xl: "30%" }} flexShrink={0}>
         <form onSubmit={handleSubmit}>
-          <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
             <FormControl>
               <FormLabel>Player Name</FormLabel>
               <Input
@@ -134,7 +135,7 @@ const PlayerPage = () => {
             </Button>
           </Center>
         </form>
-        <Table mt={6} variant="simple" width="100%">
+        <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
           <Thead>
             <Tr>
               <Th>Player Name</Th>
@@ -152,13 +153,13 @@ const PlayerPage = () => {
                   _hover={{ bg: hoverBgColor, transition: "all 0.2s" }}
                 >
                   <Td fontWeight="bold">{game.display_first_last}</Td>
-                  <Td>{ game.height_feet && game.height_inches ? 
+                  <Td>{ game.height_feet != null && game.height_inches != null ? 
                     game.height_feet + "'" + game.height_inches + '"' : "N/A"}</Td>
                     <Td>{game.weight ? game.weight : "N/A"}</Td>
                 </Tr>
               ))}
           </Tbody>
-        </Table>
+        </Table></TableContainer>
         <Flex mt={6} justifyContent="space-between" width="100%">
           <Button onClick={handlePrevPage} disabled={page <= 1}>
             Previous
@@ -167,7 +168,7 @@ const PlayerPage = () => {
           <Button onClick={handleNextPage}>Next</Button>
         </Flex>
       </VStack>
-      <Box p={6}>
+      <Box flex="1" width="100%" minW={0}>
         <PlayerCard player={selectedPlayer} />
       </Box>
     </Flex>

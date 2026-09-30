@@ -4,12 +4,14 @@ const express = require('express');
 const routes = require('./routes');
 
 const app = express();
+app.disable('x-powered-by');
 const api = express.Router();
 
-// The data only changes when it is reloaded, so let Vercel's CDN cache
-// responses for a day (a new deployment starts with an empty cache).
+// The data only changes when it is reloaded, so browsers may reuse a response
+// for 5 minutes and Vercel's CDN for a day (a new deployment starts empty).
 api.use((req, res, next) => {
-  res.set('Cache-Control', 'public, max-age=300, s-maxage=86400');
+  res.set('Cache-Control', 'public, max-age=300');
+  res.set('Vercel-CDN-Cache-Control', 'public, max-age=86400');
   next();
 });
 

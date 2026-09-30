@@ -10,7 +10,8 @@ import {
     FormControl,
     FormLabel,
     useToast, Tbody, Table, Thead, Th, Tr, Td, Flex, Center,
-    useColorModeValue
+    useColorModeValue,
+    TableContainer,
 } from '@chakra-ui/react';
 import axios from 'axios';
 
@@ -21,47 +22,38 @@ const TriviaPage = () => {
     const [middleTotal, setMiddleTotal] = useState([]);
     const [middleSpread, setMiddleSpread] = useState([]);
     const [arbitrage, setArbitrage] = useState([]);
+    const [middlingLoading, setMiddlingLoading] = useState(true);
+    const [arbitrageLoading, setArbitrageLoading] = useState(true);
     const [threshold, setThreshold] = useState(2);
     const [thresholdInput, setThresholdInput] = useState(2);
     const [page, setPage] = useState(1);
 
     const toast = useToast();
 
-    // loads middling data with default threshold initially
-    // recalled when threshold reset by user
+    // Middling results for the current threshold. Both totals and spreads are
+    // requested together; each takes about a second.
     useEffect(() => {
         async function fetchData() {
+            setMiddleTotal([]);
+            setMiddleSpread([]);
+            setMiddlingLoading(true);
             try {
-                setMiddleTotal([]);
-                setMiddleSpread([]);
-                console.log(`/trivia/middling_total`);
-                const middleTotalRes = await axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/trivia/middling_total/?threshold=${threshold}`);
-                setMiddleTotal(middleTotalRes.data);
-                console.log(`/trivia/middling_spread`);
-                const middleSpreadRes = await axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/trivia/middling_spread?threshold=${threshold}`);
-                setMiddleSpread(middleSpreadRes.data);
+                const api = process.env.REACT_APP_EXPRESS_APP_API_URL;
+                const [totalRes, spreadRes] = await Promise.all([
+                    axios.get(`${api}/trivia/middling_total?threshold=${threshold}`),
+                    axios.get(`${api}/trivia/middling_spread?threshold=${threshold}`),
+                ]);
+                setMiddleTotal(totalRes.data);
+                setMiddleSpread(spreadRes.data);
             } catch (err) {
                 console.error(err);
+            } finally {
+                setMiddlingLoading(false);
             }
         }
 
         fetchData();
     }, [threshold]);
-
-    // loads arbitrage games with page 1
-    useEffect(() => {
-        async function fetchData2() {
-            try {
-                console.log(`/trivia/arbitrage`);
-                const arbRes = await axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/trivia/arbitrage`);
-                setArbitrage(arbRes.data);
-            } catch (err) {
-                console.log(err);
-            }
-        }
-
-        fetchData2();
-    }, []);
 
     // sanitizes inputs to threshold
     const handleSubmit = (event) => {
@@ -77,48 +69,43 @@ const TriviaPage = () => {
         }
     };
 
-    const fetchArbitrageData = async (page) => {
-        try {
-            console.log(`/trivia/arbitrage`);
-            const arbRes = await axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/trivia/arbitrage?page=${page}`);
-            setArbitrage(arbRes.data);
-        } catch (err) {
-            console.log(err);
-        }
-    };
-
+    // One page of arbitrage opportunities, fetched whenever the page changes.
     useEffect(() => {
-        fetchArbitrageData(page);
+        async function fetchArbitrage() {
+            setArbitrageLoading(true);
+            try {
+                const arbRes = await axios.get(`${process.env.REACT_APP_EXPRESS_APP_API_URL}/trivia/arbitrage?page=${page}`);
+                setArbitrage(arbRes.data);
+            } catch (err) {
+                console.log(err);
+            } finally {
+                setArbitrageLoading(false);
+            }
+        }
+        fetchArbitrage();
     }, [page]);
 
-    // handles pagination
-
     const handlePrevPage = () => {
-        if (page > 1) {
-            setPage(page - 1);
-            fetchArbitrageData(page - 1);
-        }
+        if (page > 1) setPage(page - 1);
     };
 
     const handleNextPage = () => {
         setPage(page + 1);
-        fetchArbitrageData(page + 1);
     };
 
-
     return (
-        <Flex direction="row">
+        <Flex direction="column" width="100%">
         <VStack spacing={6}>
         <Text fontSize="xl" fontWeight="bold">
             Middling Betting Strategies
           </Text>
-          <Text fontSize="m" w="70%">
+          <Text fontSize="m" w={{ base: "100%", md: "70%" }}>
             A middle opportunity is when there is a gap between an over/under or spread line between two books for the same game.
             For example, if 5Dimes O/U line is 200 and Bovada has a line of 197, then you can bet the under on 5Dimes and over on Bovada.
             Most of the time, you will only lose a marginal amount of money as one of your bets is guaranteed to hit. However, when the total score is 198 or 199, you win big.
           </Text>
           <form onSubmit={handleSubmit}>
-            <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={2} alignItems="center">
             <FormLabel><b>Threshold</b> (gap between <br></br> spreads/totals required):</FormLabel>
                 <FormControl>
                     <Input
@@ -131,7 +118,7 @@ const TriviaPage = () => {
                     </Button>
             </Grid>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>O/U Middles Won</Th>
@@ -144,35 +131,38 @@ const TriviaPage = () => {
                 </Thead>
                 <Tbody>
                     <Tr>
-                                    <Td>{middleTotal[0] ? middleTotal[0].middles_total_won : "-"}</Td>
-                                    <Td>{middleTotal[0] ? middleTotal[0].middles_total_lost : "-"}</Td>
-                                    <Td>{middleTotal[0] ? middleTotal[0].middle_total_money.toFixed(2) : "-"}</Td>
-                                    <Td>{middleSpread[0] ? middleSpread[0].middles_total_won : "-"}</Td>
-                                    <Td>{middleSpread[0] ? middleSpread[0].middles_total_lost : "-"}</Td>
-                                    <Td>{middleSpread[0] ? middleSpread[0].middle_total_money.toFixed(2) : "-"}</Td>
+                                    <Td>{middleTotal[0] ? middleTotal[0].middles_total_won : middlingLoading ? "…" : "-"}</Td>
+                                    <Td>{middleTotal[0] ? middleTotal[0].middles_total_lost : middlingLoading ? "…" : "-"}</Td>
+                                    <Td>{middleTotal[0] ? middleTotal[0].middle_total_money.toFixed(2) : middlingLoading ? "…" : "-"}</Td>
+                                    <Td>{middleSpread[0] ? middleSpread[0].middles_total_won : middlingLoading ? "…" : "-"}</Td>
+                                    <Td>{middleSpread[0] ? middleSpread[0].middles_total_lost : middlingLoading ? "…" : "-"}</Td>
+                                    <Td>{middleSpread[0] ? middleSpread[0].middle_total_money.toFixed(2) : middlingLoading ? "…" : "-"}</Td>
                                 </Tr>
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
             
             <Text fontSize="xl" fontWeight="bold">
             Arbitrage Opportunities
           </Text>
-            <Text fontSize="m" w="70%">
+            <Text fontSize="m" w={{ base: "100%", md: "70%" }}>
                 Arbitrage betting is when odds line up between two different books on the same game such that you can guarantee a profit by betting a certain amount on one provider and a certain amount on the other provider. The arbitrage percentage is a measure of how drastic the difference in odds are. An opportunity is profitable only if the arbitrage percentage is less than 100%.
             </Text>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Matchup</Th>
                         <Th>Game Date</Th>
                         <Th>Book 1</Th>
                         <Th>Book 2</Th>
-                        <Th>Spread 1</Th>
-                        <Th>Spread 2</Th>
+                        <Th>Spread Price 1</Th>
+                        <Th>Spread Price 2</Th>
                         <Th>Arbitrage Percentage</Th>
                     </Tr>
                 </Thead>
                 <Tbody>
+                {arbitrageLoading && arbitrage.length === 0 && (
+                    <Tr><Td colSpan={7} color="gray.500">Finding arbitrage opportunities…</Td></Tr>
+                )}
                 {arbitrage.map((x, index) => (
                                     <Tr key={index}>
                                         <Td>{x.matchup}</Td>
@@ -185,7 +175,7 @@ const TriviaPage = () => {
                                     </Tr>
                                 ))}
                 </Tbody>
-                </Table>
+                </Table></TableContainer>
             <Center mt={4}>
                 <Button onClick={handlePrevPage} disabled={page === 1} mr={4}>
                     Previous

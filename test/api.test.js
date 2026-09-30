@@ -80,3 +80,29 @@ test('the game route puts the home team first and dates are plain', { skip: !has
   assert.deepStrictEqual([body[0].pts, body[1].pts], [85, 108]);
   assert.strictEqual(body[0].game_date, '2018-06-08');
 });
+
+test('game search filters the home and away teams as labelled', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  // 2018 Finals: games 1-2 in Oakland, 3-4 in Cleveland.
+  const { body } = await get('/game/search?name-or-abbreviation1=Warriors&name-or-abbreviation2=Cavaliers&min-year=2017&max-year=2017');
+  const finals = body.filter(g => String(g.game_id).startsWith('4170040'));
+  assert.deepStrictEqual(finals.map(g => g.game_id).sort(), [41700401, 41700402]);
+  assert.ok(body.every(g => g.home_team_name === 'Warriors' && g.away_team_name === 'Cavaliers'));
+});
+
+test('arbitrage pairs two different books at plausible prices', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  for (const p of [1, 2, 5]) {
+    const { body } = await get(`/trivia/arbitrage?page=${p}`);
+    for (const row of body) {
+      assert.notStrictEqual(row.book1, row.book2);
+      for (const price of [row.spread_price1, row.spread_price2]) assert.ok(Math.abs(price) >= 100 && Math.abs(price) <= 300, price);
+      assert.ok(row.arbitrage_percentage < 1);
+    }
+  }
+});
+
+test('the team list is alphabetical', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const { body } = await get('/team/search?name-or-abbreviation=');
+  const names = body.map(t => t.name);
+  assert.strictEqual(names.length, 30);
+  assert.deepStrictEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
+});

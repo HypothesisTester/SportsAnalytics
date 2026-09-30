@@ -10,7 +10,8 @@ import {
     FormControl,
     FormLabel,
     useToast, Tbody, Table, Thead, Th, Tr, Td, Flex, Center,
-    useColorModeValue, IconButton
+    useColorModeValue, IconButton,
+    TableContainer,
 } from '@chakra-ui/react';
 import { FiArrowDownCircle, FiArrowUpCircle } from 'react-icons/fi';
 import axios from 'axios';
@@ -143,10 +144,10 @@ const GamePage = () => {
 
     return (
         <Box width="100%">
-        <Flex direction="row" width="100%">
-        <VStack spacing={6}>
+        <Flex direction={{ base: "column", xl: "row" }} width="100%" gap={6} align="start">
+        <VStack spacing={6} width={{ base: "100%", xl: "45%" }} flexShrink={0}>
             <form onSubmit={handleSubmit}>
-            <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
                 <FormControl>
                     <FormLabel>Home Team</FormLabel>
                     <Input
@@ -192,7 +193,7 @@ const GamePage = () => {
                     </Button>
                 </Center>
             </form>
-            <Table mt={6} variant="simple" width="100%">
+            <TableContainer w="100%"><Table mt={6} variant="simple" width="100%">
                 <Thead>
                     <Tr>
                         <Th>Home Team</Th>
@@ -219,7 +220,7 @@ const GamePage = () => {
                             </Tr>
                         ))}
                 </Tbody>
-            </Table>
+            </Table></TableContainer>
             <Flex mt={6} justifyContent="space-between" width="100%">
                 <Button onClick={handlePrevPage} disabled={page <= 1}>
                     Previous
@@ -229,7 +230,7 @@ const GamePage = () => {
                     Next
                 </Button>
             </Flex>
-            <Box p={6}>
+            <Box flex="1" width="100%" minW={0}>
                 <div ref={gameCardRef}>
                     <GameCard gameId={selectedGameId} />
                 </div>
