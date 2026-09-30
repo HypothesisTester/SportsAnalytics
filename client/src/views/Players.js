@@ -7,6 +7,7 @@ import {
   useDebounced, useSticky, useTitle, useWide,
 } from '../ui';
 import { AgainstTheSpread, AsTheUnderdog, SourceNote } from './betting';
+import { PlayerSeasons } from './seasons';
 
 export default function Players() {
   const { id } = useParams();
@@ -62,19 +63,23 @@ export default function Players() {
   );
 }
 
-const playerPaths = id => [`/player/${id}`, `/player/${id}/average_stats`, `/player/${id}/spread_performance`, `/player/${id}/player_underdog`];
+const playerPaths = id => [
+  `/player/${id}`, `/player/${id}/average_stats`, `/player/${id}/spread_performance`, `/player/${id}/player_underdog`,
+  `/player/${id}/seasons`,
+];
 
 function PlayerDetail({ id }) {
   const info = useData(`/player/${id}`);
   const avgs = useData(`/player/${id}/average_stats`);
   const spread = useData(`/player/${id}/spread_performance`);
   const underdog = useData(`/player/${id}/player_underdog`);
+  const seasons = useData(`/player/${id}/seasons`);
   const p = info.data && info.data[0];
   useTitle(p ? p.display_first_last : null);
 
   if (info.error) return <Problem error={info.error} onRetry={info.retry} what="this player" />;
   // Show the page once everything has arrived (each part is quick), so nothing jumps.
-  if (info.loading || avgs.loading || spread.loading || underdog.loading) return <Loading />;
+  if ([info, avgs, spread, underdog, seasons].some(r => r.loading)) return <Loading />;
   if (!p) return <Empty action={<Link className="button" to="/players">See all players</Link>}>There's no player with that id.</Empty>;
 
   const facts = [
@@ -124,6 +129,11 @@ function PlayerDetail({ id }) {
             </div>
           </>
         )}
+      </section>
+
+      <section className="section">
+        <h2>By season</h2>
+        <PlayerSeasons data={seasons.data} />
       </section>
 
       <section className="section">

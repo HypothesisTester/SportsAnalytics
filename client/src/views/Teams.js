@@ -6,6 +6,7 @@ import {
   BackLink, Empty, Figure, ListDetail, Loading, Problem, SearchField, Skeleton, useSticky, useTitle, useWide,
 } from '../ui';
 import { AgainstTheSpread, AsTheUnderdog, SourceNote } from './betting';
+import { TeamSeasons } from './seasons';
 
 export default function Teams() {
   const { id } = useParams();
@@ -58,7 +59,7 @@ export default function Teams() {
 
 const teamPaths = id => [
   `/team/${id}`, `/team/${id}/top_players?num_players=15`, `/team/${id}/betting`,
-  `/team/${id}/spread_cover`, `/team/${id}/underdog_wins`, `/team/${id}/underdog_money`,
+  `/team/${id}/spread_cover`, `/team/${id}/underdog_wins`, `/team/${id}/underdog_money`, `/team/${id}/seasons`,
 ];
 
 function TeamDetail({ id }) {
@@ -68,11 +69,12 @@ function TeamDetail({ id }) {
   const cover = useData(`/team/${id}/spread_cover`);
   const dogWins = useData(`/team/${id}/underdog_wins`);
   const dogMoney = useData(`/team/${id}/underdog_money`);
+  const seasons = useData(`/team/${id}/seasons`);
   const t = team.data && team.data[0];
   useTitle(t ? t.name : null);
 
   if (team.error) return <Problem error={team.error} onRetry={team.retry} what="this team" />;
-  if ([team, players, books, cover, dogWins, dogMoney].some(r => r.loading)) return <Loading />;
+  if ([team, players, books, cover, dogWins, dogMoney, seasons].some(r => r.loading)) return <Loading />;
   if (!t) return <Empty action={<Link className="button" to="/teams">See all teams</Link>}>There's no team with that id.</Empty>;
 
   const games = t.number_wins + t.number_losses;
@@ -103,6 +105,11 @@ function TeamDetail({ id }) {
         <AsTheUnderdog loading={!dogWins.data || !dogMoney.data} subject={`The ${t.name}`}
           games={w && w.total_games} wins={w && w.count} total={m && m.money} sumSq={m && m.money_sum_sq} />
         <SourceNote />
+      </section>
+
+      <section className="section">
+        <h2>By season</h2>
+        <TeamSeasons data={seasons.data} name={t.name} />
       </section>
 
       <section className="section">

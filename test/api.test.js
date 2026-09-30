@@ -139,10 +139,23 @@ test('leaderboards are ranked by the lower end of the 95% interval', { skip: !ha
     for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i - 1].lower_bound >= rows[i].lower_bound);
     assert.ok(rows[0].players > rows[0].above_even);
   }
-  // Wilson lower bound for 36 of 51 (Okaro White), checked against statsmodels.
-  const white = spread.find(r => r.person_id === 1627855);
-  assert.ok(Math.abs(white.lower_bound - 0.570009) < 1e-5);
+  // Wilson lower bound for 41 of 60 (Malik Hairston), from statsmodels.
+  const leader = spread.find(r => r.person_id === 201612);
+  assert.deepStrictEqual([leader.count, leader.total_games - leader.pushes], [41, 60]);
+  assert.ok(Math.abs(leader.lower_bound - 0.557662) < 1e-5);
   assert.ok(dogs.every(r => r.money_sum_sq > 0));
+});
+
+test('preseason games and games a player sat out are not counted', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  // LeBron James: 1,657 regular season, play-in and playoff games played, 2003-04 to 2022-23.
+  const [avg] = (await get('/player/2544/average_stats')).body;
+  assert.strictEqual(avg.games_played, 1657);
+  const seasons = (await get('/player/2544/seasons')).body;
+  assert.strictEqual(seasons.reduce((a, s) => a + s.games, 0), 1657);
+  assert.strictEqual(seasons.find(s => s.season_year === 2005).games, 92);
+  const [spread] = (await get('/player/2544/spread_performance')).body;
+  const inSeasons = seasons.reduce((a, s) => [a[0] + (s.covers || 0), a[1] + s.spread_games], [0, 0]);
+  assert.deepStrictEqual(inSeasons, [spread.count, spread.total_games]);
 });
 
 test('% and _ in a search are matched literally', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {

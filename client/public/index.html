@@ -54,9 +54,9 @@
           get('/api/team/search');
           get('/api/game/search?page=1');
         } else if ((m = p.match(/^\/players\/(\d+)$/))) {
-          ['', '/average_stats', '/spread_performance', '/player_underdog'].forEach(function (x) { get('/api/player/' + m[1] + x); });
+          ['', '/average_stats', '/spread_performance', '/player_underdog', '/seasons'].forEach(function (x) { get('/api/player/' + m[1] + x); });
         } else if ((m = p.match(/^\/teams\/(\d+)$/))) {
-          ['', '/top_players?num_players=15', '/betting', '/spread_cover', '/underdog_wins', '/underdog_money']
+          ['', '/top_players?num_players=15', '/betting', '/spread_cover', '/underdog_wins', '/underdog_money', '/seasons']
             .forEach(function (x) { get('/api/team/' + m[1] + x); });
           get('/api/team/search');
         } else if (p === '/teams') {
