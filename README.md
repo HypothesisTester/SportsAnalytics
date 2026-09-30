@@ -6,11 +6,12 @@ NBA betting analytics: how teams and players performed against the betting lines
 
 ## What it shows
 
+- **Strategy tester**: pick a rule (spread, moneyline or total; home or away; favourite or underdog; a line range, seasons, a team, a sportsbook) and see what $100 on every matching bet would have returned, with a running total drawn over the range a bettor with no edge would land in.
 - **Games**: search 14,906 games (2006–07 to 2017–18) by team, season and total points. Each game shows who covered the spread and the total, the lines from 10 sportsbooks, the box score, and the two teams' record against each other.
-- **Players**: career averages (box scores from 2003–04 to 2022–23), how often their team covered the spread, and what $100 bets on their team as the underdog would have returned.
-- **Teams**: record, average lines per sportsbook, spread covers and underdog returns.
-- **Strategies**: how "middling" between two books' lines would have done, and the arbitrage opportunities between books' spread prices.
-- **Leaderboards**: the players with the best records against the spread and as underdogs, and the opposing pairs who shared the most scoring.
+- **Teams and players**: records and career averages, season-by-season charts, how often they covered the spread, and what $100 on them as the underdog would have returned.
+- **Strategies and leaderboards**: "middling" between two books' lines, genuine arbitrage between books' prices on the same spread, and the players with the best records against the spread and as underdogs.
+
+Every rate and return comes with a 95% interval (Wilson for rates, Student's t for returns) and a plain verdict on whether it could be luck; the leaderboards are ranked by the bottom of the interval, and say how many players luck alone would put there. The formulas are checked against scipy and statsmodels, and the strategy tester's totals against a recomputation from the raw CSVs with pandas. Preseason games and games a player sat out are left out of every figure.
 
 ## Architecture
 
@@ -22,7 +23,7 @@ flowchart LR
     end
     Load --> DB[("TiDB Cloud<br/>MySQL-compatible")]
     Browser --> Static["Vercel CDN<br/>React app"]
-    Browser -->|"/api/*"| API["Vercel function<br/>Express, 26 routes"]
+    Browser -->|"/api/*"| API["Vercel function<br/>Express, 29 routes"]
     API -->|"read-only user,<br/>bound parameters"| DB
 ```
 

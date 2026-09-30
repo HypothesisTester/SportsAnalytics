@@ -37,9 +37,9 @@ export default function Leaderboards() {
         />
         <Board
           title="As the underdog"
-          about="Return per game from $100 on a player's team whenever it was the moneyline underdog."
+          about="Return per game from $100 on a player's team whenever it was the moneyline underdog, over at least 30 games."
           chance={r => `${int(r.above_even)} of ${int(r.players)} players have an interval entirely above $0. With no real edge, luck alone would put at most about ${int(r.players * 0.025)} there.`}
-          path="/trivia/underdog_players" stickyKey="underdog" initial={10} max={517} step={5}
+          path="/trivia/underdog_players" stickyKey="underdog" initial={30} min={30} max={517} step={5}
           render={x => ({
             key: x.player_id,
             name: <Link to={`/players/${x.player_id}`}>{x.display_first_last}</Link>,
@@ -67,7 +67,7 @@ export default function Leaderboards() {
   );
 }
 
-function Board({ title, about, chance, path, stickyKey, initial, max, step, render }) {
+function Board({ title, about, chance, path, stickyKey, initial, min = 0, max, step, render }) {
   const [minGames, setMinGames] = useSticky(`boards.${stickyKey}`, initial);
   const minimum = useDebounced(minGames, 300);
   const board = useData(path, { minimum_games: minimum }, { keep: true });
@@ -77,7 +77,7 @@ function Board({ title, about, chance, path, stickyKey, initial, max, step, rend
     <section className="board">
       <h2>{title}</h2>
       <p className="board__about">{about}</p>
-      <Stepper label="Minimum games" value={minGames} onChange={setMinGames} min={0} max={max} step={step} />
+      <Stepper label="Minimum games" value={minGames} onChange={setMinGames} min={min} max={max} step={step} />
       {board.error ? <Problem error={board.error} onRetry={board.retry} what="this leaderboard" />
         : !rows ? <Skeleton lines={10} />
           : rows.length === 0 ? <p className="muted">No one has played that many games.</p> : (

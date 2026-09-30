@@ -176,6 +176,22 @@ test('backtest totals match an independent recomputation', { skip: !hasDatabase 
   }
 });
 
+// A -105 team facing a -115 team is the underdog: the lower price is the favourite.
+test('moneyline favourites and underdogs are decided by comparing the two prices', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const count = async role => (await get(`/backtest?market=moneyline&role=${role}`)).body
+    .reduce((a, r) => [a[0] + r.bets, a[1] + Number(r.wins)], [0, 0]);
+  assert.deepStrictEqual(await count('underdog'), [14782, 4589]);
+  assert.deepStrictEqual(await count('favourite'), [14775, 10186]);
+});
+
+test('average lines per sportsbook count every game and average odds as probabilities', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const books = (await get('/team/1610612738/betting')).body;
+  const dimes = books.find(b => b.book_name === '5Dimes');
+  assert.ok(Math.abs(dimes.avg_spread - -1.664) < 0.001, dimes.avg_spread);
+  // No average may fall inside the impossible -100..+100 gap.
+  assert.ok(books.every(b => Math.abs(b.avg_moneyline_price) >= 100), JSON.stringify(books));
+});
+
 test('backtest rejects values outside its lists', async () => {
   for (const query of ['market=bogus', 'venue=middle', 'book=Nope', 'type=pre', "team=1'"]) {
     assert.strictEqual((await get(`/backtest?${query}`)).status, 400, query);

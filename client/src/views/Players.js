@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { prefetch, useData, usePaged } from '../api';
-import { dec, height, int, minutes, pct, plusMinus } from '../format';
+import { dec, height, int, minutes, pct, plusMinus, season } from '../format';
 import {
   BackLink, Empty, Figure, ListDetail, LoadMore, Loading, Problem, SearchField, Skeleton,
   useDebounced, useSticky, useTitle, useWide,
@@ -109,7 +109,12 @@ function PlayerDetail({ id }) {
         <h2>Career averages</h2>
         {!a ? <Skeleton lines={4} /> : !a.games_played ? <p className="muted">No box scores on record.</p> : (
           <>
-            <p className="section__sub">Per game, over {int(a.games_played)} games from 2003–04 to 2022–23.</p>
+            <p className="section__sub">
+              Per game, over {int(a.games_played)} games
+              {seasons.data && seasons.data.length
+                ? ` from ${season(seasons.data[0].season_year)} to ${season(seasons.data[seasons.data.length - 1].season_year)}`
+                : ''}, not counting preseason.
+            </p>
             <div className="figures figures--lead">
               <Figure size="lg" value={dec(a.pts)} label="Points" />
               <Figure size="lg" value={dec(a.reb)} label="Rebounds" />

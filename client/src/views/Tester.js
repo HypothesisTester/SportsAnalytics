@@ -9,6 +9,7 @@ import { ProfitChart, SeasonTable } from '../charts';
 import { cents, int, money, odds, pct, season, signedPct, spread } from '../format';
 import { meanInterval, wilson } from '../stats';
 import { Figure, IntervalScale, Problem, Segmented, Skeleton, ticksFor, useDebounced } from '../ui';
+import { MIN_FOR_INTERVAL } from './betting';
 
 const BOOKS = ['5Dimes', 'BetOnline', 'Bookmaker', 'Bovada', 'Heritage', 'Intertops', 'JustBet', 'Pinnacle Sports',
   'Sportsbetting', 'YouWager'];
@@ -29,20 +30,26 @@ const PRESETS = [
 ];
 
 const LINE = {
-  spread: { label: "The team's spread", hint: 'For example, from +7 for big underdogs.' },
-  moneyline: { label: "The team's odds", hint: 'American odds, for example from +300 for long shots.' },
-  total: { label: 'The total', hint: 'For example, from 215 for high-scoring games.' },
+  spread: { label: 'Spread', hint: "The spread is the team's own: from +7 picks big underdogs." },
+  moneyline: { label: 'Odds', hint: "American odds for the team: from +300 picks long shots." },
+  total: { label: 'Total', hint: 'From 215 picks high-scoring games.' },
 };
+
+/** A typed line limit that is a number ("-", "." and "" are not). */
+const isNumber = v => v !== '' && !Number.isNaN(Number(v));
 
 /** The rule in words, for the headline. */
 function describe(r, teams) {
   const team = r.team && teams ? (teams.find(t => String(t.team_id) === r.team) || {}).name : null;
   const show = v => {
     const n = Number(v);
+    if (Number.isNaN(n)) return v;
     return r.market === 'spread' ? spread(n) : r.market === 'moneyline' ? odds(n) : String(n);
   };
-  const range = r.min !== '' && r.max !== '' ? ` between ${show(r.min)} and ${show(r.max)}`
-    : r.min !== '' ? ` of ${show(r.min)} or more` : r.max !== '' ? ` of ${show(r.max)} or less` : '';
+  const hasMin = isNumber(r.min);
+  const hasMax = isNumber(r.max);
+  const range = hasMin && hasMax ? ` between ${show(r.min)} and ${show(r.max)}`
+    : hasMin ? ` of ${show(r.min)} or more` : hasMax ? ` of ${show(r.max)} or less` : '';
   const games = r.type === 'playoffs' ? 'playoff ' : r.type === 'regular' ? 'regular season ' : '';
   if (r.market === 'total') {
     return `the ${r.side} in every ${games}game${team ? ` involving the ${team}` : ''}${range ? ` with a total${range}` : ''}`;
@@ -56,7 +63,7 @@ function describe(r, teams) {
 }
 
 function verdict(roiLow, roiHigh) {
-  if (roiLow == null) return 'Too few bets to judge.';
+  if (roiLow == null) return `With fewer than ${MIN_FOR_INTERVAL} bets, there are too few to judge.`;
   if (roiLow > 0) return 'The whole interval is above zero: this made money beyond what luck explains.';
   if (roiHigh < 0) return 'The whole interval is below zero: this lost money beyond what luck explains, mostly to the bookmaker’s margin.';
   return 'The interval includes zero, so the result is consistent with luck.';
@@ -76,7 +83,7 @@ export default function Tester() {
   const query = useDebounced(rule, 300);
   const apiParams = {
     market: query.market, from: query.from, to: query.to, type: query.type, team: query.team, book: query.book,
-    min: query.min, max: query.max,
+    min: isNumber(query.min) ? query.min : '', max: isNumber(query.max) ? query.max : '',
     ...(query.market === 'total' ? { side: query.side } : { venue: query.venue, role: query.role }),
   };
   const result = useData('/backtest', apiParams, { keep: true });
@@ -200,7 +207,7 @@ function Results({ rows, rule, teams, stale }) {
   const winRate = decided ? t.wins / decided : null;
   const [winLow, winHigh] = wilson(t.wins, decided);
   const needed = t.breakEven / t.bets;
-  const { mean, low, high } = meanInterval(t.bets, t.profit, t.sumSq);
+  const { mean, low, high } = t.bets >= MIN_FOR_INTERVAL ? meanInterval(t.bets, t.profit, t.sumSq) : { mean: t.profit / t.bets };
   const roi = mean / 100;
   const [roiLow, roiHigh] = low == null ? [null, null] : [low / 100, high / 100];
   const sd = t.bets > 1 ? Math.sqrt(Math.max(t.sumSq - (t.profit * t.profit) / t.bets, 0) / (t.bets - 1)) : 0;
@@ -218,20 +225,20 @@ function Results({ rows, rule, teams, stale }) {
     <div className={`results${stale ? ' is-stale' : ''}`} aria-live="polite">
       <p className="results__lede">
         Betting $100 on {describe(rule, teams)}{' '}
-        <span className="nowrap">({season(Number(rule.from))} to {season(Number(rule.to))}
+        <span className="nowrap">({rule.from === rule.to ? `the ${season(Number(rule.from))} season` : `${season(Number(rule.from))} to ${season(Number(rule.to))}`}
           {rule.book !== '5Dimes' ? `, ${rule.book} lines` : ''}):</span>
       </p>
       <div className="figures figures--lead">
         <Figure size="lg" value={int(t.bets)} label="Bets" />
-        <Figure size="lg" value={winRate == null ? '–' : pct(winRate)} label={`Won, needed ${pct(needed)}`}
-          tone={winRate > needed ? 'beat' : undefined} />
+        <Figure size="lg" value={winRate == null ? '–' : pct(winRate)} label="Won" />
         <Figure size="lg" value={money(t.profit)} label="Net result" tone={t.profit > 0 ? 'beat' : undefined} />
         <Figure size="lg" value={signedPct(roi)} label="Return per bet"
           tone={roi > 0 ? 'beat' : undefined} />
       </div>
       <p className="results__text">
-        {int(t.wins)} won, {int(t.losses)} lost{t.pushes ? `, ${int(t.pushes)} pushed` : ''}. At these prices a bet needed to
-        win {pct(needed)} of the time to break even; the 95% interval for the win rate is {pct(winLow)} to {pct(winHigh)}.
+        {int(t.wins)} won, {int(t.losses)} lost{t.pushes ? `, ${int(t.pushes)} pushed` : ''}; the 95% interval for the win
+        rate is {pct(winLow)} to {pct(winHigh)}. The prices imply an average break-even rate of {pct(needed)}, but with
+        mixed odds the return per bet, not the win rate, decides the result.
         {roiLow != null && ` The 95% interval for the return per bet is ${signedPct(roiLow)} to ${signedPct(roiHigh)}, or ${cents(low)} to ${cents(high)} per $100.`}
         {' '}{verdict(roiLow, roiHigh)}
       </p>

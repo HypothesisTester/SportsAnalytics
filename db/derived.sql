@@ -30,18 +30,23 @@ FROM (
 WHERE r.margin IS NOT NULL
 GROUP BY r.player_id;
 
--- The player's team's own moneyline decides whether it was the underdog and
--- what a winning $100 bet paid.
+-- The player's team was the underdog when its moneyline was higher than its
+-- opponent's (so -105 against -115 counts); `win` is what $100 won at its price.
 TRUNCATE TABLE player_underdog_totals;
 INSERT INTO player_underdog_totals
-SELECT r.player_id, COUNT(*), SUM(IF(r.wl = 'W', r.moneyline, -100)), SUM(r.wl = 'W'),
-       SUM(POW(IF(r.wl = 'W', r.moneyline, -100), 2))
+SELECT r.player_id, COUNT(*), SUM(IF(r.wl = 'W', r.win, -100)), SUM(r.wl = 'W'),
+       SUM(POW(IF(r.wl = 'W', r.win, -100), 2))
 FROM (
-    SELECT ps.player_id, g.wl, IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2) AS moneyline
+    SELECT ps.player_id, g.wl,
+           IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2) AS moneyline,
+           IF(b.team_id = ps.team_id, b.moneyline_price2, b.moneyline_price1) AS opp_moneyline,
+           IF(IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2) > 0,
+              IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2),
+              10000 / -IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2)) AS win
     FROM player_stats ps
     JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
     JOIN betting_data b ON b.game_id = ps.game_id AND b.book_name = '5Dimes'
     WHERE ps.min IS NOT NULL AND ps.game_id >= 20000000
 ) r
-WHERE r.moneyline > 0
+WHERE r.moneyline > r.opp_moneyline
 GROUP BY r.player_id;

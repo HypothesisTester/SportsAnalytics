@@ -19,11 +19,17 @@ export function rateVerdict(low, high) {
   if (high < 1 - BREAK_EVEN) {
     return `The whole range is below ${pct(1 - BREAK_EVEN)}, so betting the other way would have profited, and that is unlikely to be luck.`;
   }
+  if (high < BREAK_EVEN) {
+    return `The whole range is below the ${pct(BREAK_EVEN)} needed to profit, so backing them lost money beyond what luck explains; betting against them wouldn't clearly have paid either.`;
+  }
   return `The range includes the ${pct(BREAK_EVEN)} needed to profit, so the record is consistent with luck.`;
 }
 
+/** Below this many games a t interval on returns (mostly -$100 or the price) isn't trustworthy. */
+export const MIN_FOR_INTERVAL = 30;
+
 export function returnVerdict(low, high) {
-  if (low == null) return 'Too few games to say whether this is luck.';
+  if (low == null) return `With fewer than ${MIN_FOR_INTERVAL} games, there are too few to say whether this is luck.`;
   if (low > 0) return 'The whole range is above zero, so the profit is unlikely to be luck.';
   if (high < 0) return 'The whole range is below zero, so the loss is more than luck explains.';
   return 'The range includes zero, so the result is consistent with luck.';
@@ -73,7 +79,7 @@ export const bound = x => (Math.abs(x) < 10 ? cents(x) : money(x));
 export function AsTheUnderdog({ loading, games, wins, total, sumSq, subject }) {
   if (loading) return <Skeleton lines={3} />;
   if (!games) return <p className="muted">No underdog games on record.</p>;
-  const { mean, low, high } = meanInterval(games, total, sumSq);
+  const { mean, low, high } = games >= MIN_FOR_INTERVAL ? meanInterval(games, total, sumSq) : { mean: total / games };
   const scale = low != null ? moneyDomain(low, high) : null;
   return (
     <>
@@ -99,7 +105,8 @@ export function AsTheUnderdog({ loading, games, wins, total, sumSq, subject }) {
 
 export const SourceNote = () => (
   <p className="source-note">
-    Spread and underdog results use 5Dimes lines from 2006–07 to 2017–18. Intervals are 95%: Wilson for rates, t for
-    returns.
+    Spread and underdog results use 5Dimes lines from 2006–07 to 2017–18, without preseason games. Intervals are 95%:
+    Wilson for rates, t for returns (approximate). They describe one team or player on its own: picked as the best of
+    many, a result is more likely than that to be luck.
   </p>
 );

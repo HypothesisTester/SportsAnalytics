@@ -184,7 +184,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 /** Round numbers for an axis spanning [lo, hi]: about five steps of 1, 2 or 5 × 10^k. */
 function niceTicks(lo, hi) {
-  const span = hi - lo || 1;
+  if (hi - lo < 1) return [-100, 0, 100];
+  const span = hi - lo;
   const raw = span / 5;
   const mag = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
@@ -237,7 +238,7 @@ export function ProfitChart({ rows, sd, format, label }) {
     <div className="chart" ref={ref}>
       <div className="chart__legend" aria-hidden="true">
         <span><i className="key key--line key--thick" />Running total</span>
-        <span><i className="key key--band" />Where no edge would be, 95% of the time</span>
+        <span><i className="key key--band" />95% range at each point for a bettor with no edge</span>
       </div>
       {width > 0 && points.length > 0 && (
         <svg width={width} height={height} role="img" aria-label={label} tabIndex={0}
