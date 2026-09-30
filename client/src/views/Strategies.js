@@ -1,6 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useData, usePaged } from '../api';
-import { int, money, odds, pct, shortDate } from '../format';
+import { int, money, odds, pct, shortDate, spread } from '../format';
 import { Figure, LoadMore, Problem, Skeleton, useDebounced, useSticky, useTitle } from '../ui';
 
 export default function Strategies() {
@@ -75,9 +76,10 @@ function Arbitrage() {
     <section className="section section--page">
       <h2>Arbitrage</h2>
       <p className="prose">
-        Sometimes two books price opposite sides of a spread generously enough that betting both guarantees a profit:
-        the implied probabilities of the two prices add up to less than 100%. The further below 100%, the bigger the
-        guaranteed return. These are the best cases, largest return first.
+        Sometimes two books offer the same spread and price opposite sides of it generously enough that betting both
+        guarantees a profit: the implied probabilities of the two prices add up to less than 100%. The further below
+        100%, the bigger the guaranteed return, before you size the two stakes to match. These are the best cases, largest
+        return first.
       </p>
       {list.error && list.rows.length === 0 ? <Problem error={list.error} onRetry={list.retry} what="arbitrage opportunities" />
         : list.rows.length === 0 ? <Skeleton lines={8} /> : (
@@ -87,22 +89,27 @@ function Arbitrage() {
                 <thead>
                   <tr>
                     <th scope="col">Game</th>
-                    <th scope="col">One side</th>
-                    <th scope="col">Other side</th>
+                    <th scope="col">Away bet</th>
+                    <th scope="col">Home bet</th>
                     <th scope="col" className="num">Implied total</th>
                     <th scope="col" className="num">Guaranteed return</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {list.rows.map((x, i) => (
-                    // eslint-disable-next-line react/no-array-index-key
-                    <tr key={i}>
+                  {list.rows.map(x => (
+                    <tr key={`${x.game_id}-${x.book1}-${x.book2}`}>
                       <th scope="row">
-                        <span className="cell-main">{x.matchup}</span>
+                        <Link to={`/games/${x.game_id}`} className="cell-main">{x.away} at {x.home}</Link>
                         <span className="cell-sub">{shortDate(x.game_date)}</span>
                       </th>
-                      <td><span className="cell-main">{odds(x.spread_price1)}</span><span className="cell-sub">{x.book1}</span></td>
-                      <td><span className="cell-main">{odds(x.spread_price2)}</span><span className="cell-sub">{x.book2}</span></td>
+                      <td>
+                        <span className="cell-main">{x.away} {spread(x.away_spread)} at {odds(x.spread_price1)}</span>
+                        <span className="cell-sub">{x.book1}</span>
+                      </td>
+                      <td>
+                        <span className="cell-main">{x.home} {spread(-x.away_spread)} at {odds(x.spread_price2)}</span>
+                        <span className="cell-sub">{x.book2}</span>
+                      </td>
                       <td className="num">{pct(x.arbitrage_percentage)}</td>
                       <td className="num beat">+{pct(1 / x.arbitrage_percentage - 1)}</td>
                     </tr>

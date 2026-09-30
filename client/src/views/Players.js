@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useData, usePaged } from '../api';
+import { prefetch, useData, usePaged } from '../api';
 import { dec, height, int, minutes, pct, plusMinus } from '../format';
 import {
   BackLink, Empty, Figure, ListDetail, LoadMore, Loading, Problem, SearchField, Skeleton,
@@ -37,6 +37,7 @@ export default function Players() {
                         return (
                           <li key={p.person_id}>
                             <Link to={`/players/${p.person_id}`} state={{ fromList: true }}
+                              onPointerEnter={() => prefetch(playerPaths(p.person_id))} onFocus={() => prefetch(playerPaths(p.person_id))}
                               className={`row simple-row${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
                               <span className="simple-row__main">
                                 <span className="simple-row__title">{p.display_first_last}</span>
@@ -61,6 +62,8 @@ export default function Players() {
   );
 }
 
+const playerPaths = id => [`/player/${id}`, `/player/${id}/average_stats`, `/player/${id}/spread_performance`, `/player/${id}/player_underdog`];
+
 function PlayerDetail({ id }) {
   const info = useData(`/player/${id}`);
   const avgs = useData(`/player/${id}/average_stats`);
@@ -70,7 +73,8 @@ function PlayerDetail({ id }) {
   useTitle(p ? p.display_first_last : null);
 
   if (info.error) return <Problem error={info.error} onRetry={info.retry} what="this player" />;
-  if (info.loading) return <Loading />;
+  // Show the page once everything has arrived (each part is quick), so nothing jumps.
+  if (info.loading || avgs.loading || spread.loading || underdog.loading) return <Loading />;
   if (!p) return <Empty action={<Link className="button" to="/players">See all players</Link>}>There's no player with that id.</Empty>;
 
   const facts = [

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useData, usePaged } from '../api';
+import { prefetch, useData, usePaged } from '../api';
 import {
   dec, half, int, longDate, minutes, money, odds, pct, plusMinus, season, shortDate, spread,
 } from '../format';
@@ -62,14 +62,14 @@ export default function Games() {
                   <span>From</span>
                   <select value={from} onChange={e => setFrom(e.target.value)}>
                     <option value="">2006–07</option>
-                    {SEASONS.slice(1).map(y => <option key={y} value={y}>{season(y)}</option>)}
+                    {SEASONS.slice(1).map(y => <option key={y} value={y} disabled={to !== '' && y > Number(to)}>{season(y)}</option>)}
                   </select>
                 </label>
                 <label className="field">
                   <span>To</span>
                   <select value={to} onChange={e => setTo(e.target.value)}>
                     <option value="">2017–18</option>
-                    {SEASONS.slice(0, -1).reverse().map(y => <option key={y} value={y}>{season(y)}</option>)}
+                    {SEASONS.slice(0, -1).reverse().map(y => <option key={y} value={y} disabled={from !== '' && y < Number(from)}>{season(y)}</option>)}
                   </select>
                 </label>
                 <label className="field">
@@ -124,6 +124,7 @@ function GameRow({ game: g, active }) {
   return (
     <li>
       <Link to={`/games/${g.game_id}`} state={{ fromList: true }}
+        onPointerEnter={() => prefetchGame(g)} onFocus={() => prefetchGame(g)}
         className={`row game-row${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
         <span className="game-row__meta">
           <span>{shortDate(g.game_date)}</span>
@@ -151,18 +152,28 @@ function TeamLine({ abbr, name, pts, won, covered, home }) {
 
 /* --------------------------------------------------------------- detail */
 
+/** Head to head is keyed by the two teams, lower team id first. */
+const matchupPath = (a, b) => (a < b ? `/matchup/${a}/${b}` : `/matchup/${b}/${a}`);
+
+/** What a game page loads, so a row can start loading it on hover or touch. */
+export const prefetchGame = g => prefetch([
+  `/game/${g.game_id}`, `/game/${g.game_id}/betting`, `/game/${g.game_id}/players`,
+  matchupPath(g.home_team_id, g.away_team_id), `${matchupPath(g.home_team_id, g.away_team_id)}/pairs`,
+]);
+
 function GameDetail({ id }) {
   const game = useData(`/game/${id}`);
   const betting = useData(`/game/${id}/betting`);
   const players = useData(`/game/${id}/players`);
-  const h2h = useData(`/game/${id}/matchup_stats`);
-  const pairs = useData(`/game/${id}/matchup_top_pairs`);
-
   const [home, away] = game.data || [];
+  const pair = home ? matchupPath(home.team_id, away.team_id) : null;
+  const h2h = useData(pair);
+  const pairs = useData(pair && `${pair}/pairs`);
   useTitle(home ? `${away.name} at ${home.name}, ${shortDate(home.game_date)}` : null);
 
   if (game.error) return <Problem error={game.error} onRetry={game.retry} what="this game" />;
-  if (game.loading) return <Loading />;
+  // The top of the page appears in one go, so nothing jumps as it loads.
+  if (game.loading || (home && ((betting.loading && !betting.error) || (players.loading && !players.error)))) return <Loading />;
   if (!home) {
     return <Empty action={<Link className="button" to="/">See all games</Link>}>There's no game with that id.</Empty>;
   }
@@ -180,31 +191,32 @@ function GameDetail({ id }) {
       </header>
 
       {betting.data ? <AgainstTheLine home={home} away={away} lines={betting.data} />
-        : betting.error ? <Problem error={betting.error} onRetry={betting.retry} what="the betting lines" />
-          : <Skeleton lines={3} />}
+        : <Problem error={betting.error} onRetry={betting.retry} what="the betting lines" />}
 
       <section className="section">
         <h2>Lines by sportsbook</h2>
-        {betting.data ? <LinesTable home={home} away={away} lines={betting.data} /> : <Skeleton lines={6} />}
+        {betting.data && <LinesTable home={home} away={away} lines={betting.data} />}
       </section>
 
       <section className="section">
         <h2>Box score</h2>
         {players.data ? <BoxScore home={home} away={away} players={players.data} />
-          : players.error ? <Problem error={players.error} onRetry={players.retry} what="the box score" />
-            : <Skeleton lines={8} />}
+          : <Problem error={players.error} onRetry={players.retry} what="the box score" />}
       </section>
 
-      <section className="section">
-        {h2h.data ? <HeadToHead home={home} away={away} stats={h2h.data[0]} /> : <><h2>Head to head</h2><Skeleton lines={5} /></>}
+      <section className="section section--h2h">
+        <h2>Head to head</h2>
+        {h2h.data ? <HeadToHead home={home} away={away} rows={h2h.data} />
+          : h2h.error ? <Problem error={h2h.error} onRetry={h2h.retry} what="the head to head" /> : <Skeleton lines={7} />}
       </section>
 
       <section className="section">
         <h2>Player matchups</h2>
         <p className="section__sub">
-          Opposing players in these teams' meetings, by the share of each game's points the two of them scored.
+          Opposing players who met at least three times, by the share of each game's points the two of them scored.
         </p>
-        {pairs.data ? <Pairs home={home} away={away} pairs={pairs.data} /> : <Skeleton lines={4} />}
+        {pairs.data ? <Pairs home={home} away={away} pairs={pairs.data} />
+          : pairs.error ? <Problem error={pairs.error} onRetry={pairs.retry} what="the player matchups" /> : <Skeleton lines={8} />}
       </section>
     </article>
   );
@@ -402,31 +414,28 @@ function BoxScore({ home, away, players }) {
   );
 }
 
-function HeadToHead({ home, away, stats }) {
-  if (!stats) return <><h2>Head to head</h2><p className="muted">These teams have no other meetings on record.</p></>;
-  // The query numbers the teams by team id, so map "1" and "2" onto away and home.
-  const key = team => (team.team_id < (team === home ? away : home).team_id ? '1' : '2');
-  const a = key(away);
-  const h = key(home);
-  const get = (name, k) => stats[name.replace('#', k)];
-  const wins = [get('team#_wins', a), get('team#_wins', h)];
-  const lead = wins[0] === wins[1] ? 'The series is level'
-    : `The ${wins[0] > wins[1] ? away.name : home.name} lead ${Math.max(...wins)}–${Math.min(...wins)}`;
+function HeadToHead({ home, away, rows }) {
+  const of = team => rows.find(r => r.team_id === team.team_id);
+  const [a, h] = [of(away), of(home)];
+  if (!a || !h) return <p className="muted">These teams have no other meetings on record.</p>;
+  const lead = a.wins === h.wins ? 'The series is level'
+    : `The ${a.wins > h.wins ? away.name : home.name} lead ${Math.max(a.wins, h.wins)}–${Math.min(a.wins, h.wins)}`;
+  const pushes = a.pushes ? ` ${a.pushes === 1 ? 'One meeting' : `${a.pushes} meetings`} landed exactly on the spread.` : '';
 
-  const rows = [
-    { label: 'Wins', v: wins, fmt: int, best: 'high' },
-    { label: 'Points per game', v: [get('avg_pts_team#', a), get('avg_pts_team#', h)], fmt: x => dec(x), best: 'high' },
-    { label: 'Average spread', v: [get('avg_spread_team#', a), get('avg_spread_team#', h)], fmt: x => spread(Number(x.toFixed(1))) },
-    { label: 'Covered the spread', v: [get('spread_success_team#', a), get('spread_success_team#', h)], fmt: int, best: 'high' },
-    { label: 'Wins as the underdog', v: [get('underdog_wins_team#', a), get('underdog_wins_team#', h)], fmt: int, best: 'high' },
-    { label: '$100 on every underdog game', v: [get('total_money_team#', a), get('total_money_team#', h)], fmt: money, money: true },
+  const facts = [
+    { label: 'Wins', v: t => t.wins, fmt: int, best: true },
+    { label: 'Points per game', v: t => t.avg_pts, fmt: x => dec(x), best: true },
+    { label: 'Average spread', v: t => t.avg_spread, fmt: x => (x == null ? '–' : spread(Number(x.toFixed(1)))) },
+    { label: 'Covered the spread', v: t => t.covers, fmt: int, best: true },
+    { label: 'Won as the underdog', v: t => t.underdog_wins, fmt: (x, t) => `${int(x)} of ${int(t.underdog_games)}` },
+    { label: '$100 on each underdog game', v: t => t.underdog_money, fmt: money, money: true },
   ];
 
   return (
     <>
-      <h2>Head to head</h2>
       <p className="section__sub">
-        {lead} over {stats.total_games} meetings from 2006–07 to 2017–18, with an average total of {dec(stats.average_total)}.
+        {lead} over {a.total_games} meetings from 2006–07 to 2017–18, with an average total
+        of {dec(a.average_total)}.{pushes}
       </p>
       <div className="tape">
         <div className="tape__head">
@@ -434,19 +443,23 @@ function HeadToHead({ home, away, stats }) {
           <span />
           <Link to={`/teams/${home.team_id}`}>{home.name}</Link>
         </div>
-        {rows.map(r => {
-          const lead0 = r.best === 'high' && r.v[0] > r.v[1];
-          const lead1 = r.best === 'high' && r.v[1] > r.v[0];
-          const tone = x => (r.money ? (x > 0 ? ' is-beat' : '') : '');
+        {facts.map(f => {
+          const [x, y] = [f.v(a), f.v(h)];
+          const cls = (mine, theirs) => [
+            'tape__value',
+            f.best && mine > theirs ? 'is-lead' : '',
+            f.money && mine > 0 ? 'is-beat' : '',
+          ].filter(Boolean).join(' ');
           return (
-            <div className="tape__row" key={r.label}>
-              <span className={`tape__value${lead0 ? ' is-lead' : ''}${tone(r.v[0])}`}>{r.fmt(r.v[0])}</span>
-              <span className="tape__label">{r.label}</span>
-              <span className={`tape__value${lead1 ? ' is-lead' : ''}${tone(r.v[1])}`}>{r.fmt(r.v[1])}</span>
+            <div className="tape__row" key={f.label}>
+              <span className={cls(x, y)}>{f.fmt(x, a)}</span>
+              <span className="tape__label">{f.label}</span>
+              <span className={cls(y, x)}>{f.fmt(y, h)}</span>
             </div>
           );
         })}
       </div>
+      <p className="source-note">Spread and underdog results use 5Dimes lines; the average spread uses every book.</p>
     </>
   );
 }
@@ -457,7 +470,7 @@ function Pairs({ home, away, pairs }) {
   const first = home.team_id < away.team_id ? home : away;
   const second = first === home ? away : home;
   const shown = useMemo(() => (all ? pairs : pairs.slice(0, 8)), [all, pairs]);
-  if (pairs.length === 0) return <p className="muted">No pairs on record.</p>;
+  if (pairs.length === 0) return <p className="muted">No pair of opponents met three times.</p>;
   return (
     <>
       <div className="table-wrap table-wrap--narrow">
@@ -472,9 +485,9 @@ function Pairs({ home, away, pairs }) {
           </thead>
           <tbody>
             {shown.map(p => (
-              <tr key={`${p.name1}-${p.name2}`}>
-                <td>{p.name1}</td>
-                <td>{p.name2}</td>
+              <tr key={`${p.player1_id}-${p.player2_id}`}>
+                <td><Link to={`/players/${p.player1_id}`}>{p.name1}</Link></td>
+                <td><Link to={`/players/${p.player2_id}`}>{p.name2}</Link></td>
                 <td className="num">{p.total_games}</td>
                 <td className="num">{pct(p.avg_pct_pts)}</td>
               </tr>
@@ -490,4 +503,3 @@ function Pairs({ home, away, pairs }) {
     </>
   );
 }
-

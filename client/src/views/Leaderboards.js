@@ -18,12 +18,12 @@ export default function Leaderboards() {
       <div className="boards">
         <Board
           title="Against the spread"
-          about="How often a player's team covered the 5Dimes spread in games he played."
+          about="How often a player's team covered the 5Dimes spread in games he played, not counting pushes."
           path="/trivia/spread_players" stickyKey="spread" initial={50} max={1000} step={10}
           render={x => ({
             key: x.person_id,
             name: <Link to={`/players/${x.person_id}`}>{x.display_first_last}</Link>,
-            detail: `${int(x.count)} of ${int(x.total_games)} games`,
+            detail: `Covered ${int(x.count)} of ${int(x.total_games - x.pushes)}`,
             figure: pct(x.spread_percentage),
             beat: x.spread_percentage > BREAK_EVEN,
           })}

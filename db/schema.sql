@@ -160,10 +160,11 @@ CREATE TABLE IF NOT EXISTS player_averages (
   KEY player_averages_games (games_played)
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
--- How often each player's team covered the 5Dimes spread.
+-- How often each player's team covered the 5Dimes spread, and how often it pushed.
 CREATE TABLE IF NOT EXISTS player_spread_totals (
   player_id      INT  NOT NULL,
   spread_covers  INT  NOT NULL,
+  pushes         INT  NOT NULL,
   total_games    INT  NOT NULL,
   PRIMARY KEY (player_id)
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;

@@ -15,32 +15,27 @@ GROUP BY ps.player_id;
 
 TRUNCATE TABLE player_spread_totals;
 INSERT INTO player_spread_totals
-SELECT ps.player_id,
-       SUM(CASE
-             WHEN ps.team_id = b.team_id THEN IF((g_home.pts + b.spread1) > g_away.pts, 1, 0)
-             WHEN ps.team_id = b.a_team_id THEN IF((g_away.pts + b.spread2) > g_home.pts, 1, 0)
-             ELSE 0
-           END),
-       COUNT(*)
-FROM player_stats ps
-JOIN betting_data b ON ps.game_id = b.game_id
-JOIN game_data g_home ON b.game_id = g_home.game_id AND b.team_id = g_home.team_id
-JOIN game_data g_away ON b.game_id = g_away.game_id AND b.a_team_id = g_away.team_id
-WHERE b.book_name = '5Dimes'
-GROUP BY ps.player_id;
+SELECT r.player_id, SUM(r.margin > 0), SUM(r.margin = 0), COUNT(*)
+FROM (
+    SELECT ps.player_id, g.pts - o.pts + IF(b.team_id = ps.team_id, b.spread1, b.spread2) AS margin
+    FROM player_stats ps
+    JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
+    JOIN game_data o ON o.game_id = ps.game_id AND o.team_id = g.a_team_id
+    JOIN betting_data b ON b.game_id = ps.game_id AND b.book_name = '5Dimes'
+) r
+WHERE r.margin IS NOT NULL
+GROUP BY r.player_id;
 
+-- The player's team's own moneyline decides whether it was the underdog and
+-- what a winning $100 bet paid.
 TRUNCATE TABLE player_underdog_totals;
 INSERT INTO player_underdog_totals
-SELECT P.player_id,
-       COUNT(P.game_id),
-       SUM(IF(G.wl = 'W', IF(P.moneyline_price1 > 0, P.moneyline_price1, P.moneyline_price2), -100)),
-       SUM(IF(G.wl = 'W', 1, 0))
-FROM game_data G
-JOIN (
-    SELECT PS.team_id, PS.game_id, PS.player_id, B.moneyline_price1, B.moneyline_price2
-    FROM player_stats PS
-    JOIN betting_data B ON PS.game_id = B.game_id
-        AND ((PS.team_id = B.team_id AND B.moneyline_price1 > 0) OR (PS.team_id = B.a_team_id AND B.moneyline_price2 > 0))
-    WHERE B.book_name = '5Dimes'
-) P ON P.team_id = G.team_id AND P.game_id = G.game_id
-GROUP BY P.player_id;
+SELECT r.player_id, COUNT(*), SUM(IF(r.wl = 'W', r.moneyline, -100)), SUM(r.wl = 'W')
+FROM (
+    SELECT ps.player_id, g.wl, IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2) AS moneyline
+    FROM player_stats ps
+    JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
+    JOIN betting_data b ON b.game_id = ps.game_id AND b.book_name = '5Dimes'
+) r
+WHERE r.moneyline > 0
+GROUP BY r.player_id;

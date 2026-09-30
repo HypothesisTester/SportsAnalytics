@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useData } from '../api';
+import { prefetch, useData } from '../api';
 import { dec, int, odds, pct, spread } from '../format';
 import {
   BackLink, Empty, Figure, ListDetail, Loading, Problem, SearchField, Skeleton, useSticky, useTitle, useWide,
@@ -39,6 +39,7 @@ export default function Teams() {
                       return (
                         <li key={t.team_id}>
                           <Link to={`/teams/${t.team_id}`} state={{ fromList: true }}
+                            onPointerEnter={() => prefetch(teamPaths(t.team_id))} onFocus={() => prefetch(teamPaths(t.team_id))}
                             className={`row team-row${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
                             <span className="team-row__abbr">{t.abbreviation}</span>
                             <span className="team-row__name">{t.name}</span>
@@ -55,9 +56,14 @@ export default function Teams() {
   );
 }
 
+const teamPaths = id => [
+  `/team/${id}`, `/team/${id}/top_players?num_players=15`, `/team/${id}/betting`,
+  `/team/${id}/spread_cover`, `/team/${id}/underdog_wins`, `/team/${id}/underdog_money`,
+];
+
 function TeamDetail({ id }) {
   const team = useData(`/team/${id}`);
-  const players = useData(`/team/${id}/top_players`, { num_players: 15 });
+  const players = useData(`/team/${id}/top_players?num_players=15`);
   const books = useData(`/team/${id}/betting`);
   const cover = useData(`/team/${id}/spread_cover`);
   const dogWins = useData(`/team/${id}/underdog_wins`);
@@ -66,7 +72,7 @@ function TeamDetail({ id }) {
   useTitle(t ? t.name : null);
 
   if (team.error) return <Problem error={team.error} onRetry={team.retry} what="this team" />;
-  if (team.loading) return <Loading />;
+  if ([team, players, books, cover, dogWins, dogMoney].some(r => r.loading)) return <Loading />;
   if (!t) return <Empty action={<Link className="button" to="/teams">See all teams</Link>}>There's no team with that id.</Empty>;
 
   const games = t.number_wins + t.number_losses;

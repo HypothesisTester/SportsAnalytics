@@ -12,7 +12,8 @@ export function AgainstTheSpread({ data, subject }) {
     <div className="ats">
       <Figure size="lg" value={pct(row.spread_percentage)} label="Cover rate" tone={beat ? 'beat' : undefined} />
       <p className="ats__text">
-        {subject} covered {int(row.count)} of {int(row.total_games)} spreads.
+        {subject} covered {int(row.count)} of {int(row.total_games - row.pushes)} spreads
+        {row.pushes ? `, not counting ${int(row.pushes)} ${row.pushes === 1 ? 'push' : 'pushes'}` : ''}.
         {beat ? ' That beats the rate needed to profit at standard odds.' : ' That is short of the rate needed to profit at standard odds.'}
       </p>
       <CoverBar rate={row.spread_percentage} />

@@ -68,3 +68,5 @@ Then open http://localhost:6100. For frontend development, run `npm start` in `c
 
 1. Create a TiDB Cloud Starter cluster (free) and load it: `DATABASE_URL='mysql://<user>:<password>@<host>:4000/sports_betting' APP_DB_PASSWORD='<new password>' npm run load-data`. This also creates the read-only user the site connects as.
 2. Import the repo into Vercel and set `DATABASE_URL` to that read-only user's connection string. `vercel.json` does the rest.
+
+After a change to `db/derived.sql`, `npm run rebuild-derived` (with the admin `DATABASE_URL`) rebuilds only the three summary tables, in a few seconds.

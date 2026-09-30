@@ -53,7 +53,7 @@ test('unknown API paths are a JSON 404', async () => {
 
 const routes = [
   '/game/41700404', '/game/41700404/players', '/game/41700404/betting',
-  '/game/41700404/matchup_stats', '/game/41700404/matchup_top_pairs', '/game/search',
+  '/matchup/1610612739/1610612744', '/matchup/1610612739/1610612744/pairs', '/game/search',
   '/player/search', '/player/search?name=curry', '/player/2544', '/player/2544/games',
   '/player/2544/average_stats', '/player/2544/spread_performance', '/player/2544/player_underdog',
   '/team/search?name-or-abbreviation=war', '/team/1610612744', '/team/1610612744/games',
@@ -94,6 +94,47 @@ test('game search filters the home and away teams as labelled', { skip: !hasData
   const finals = body.filter(g => String(g.game_id).startsWith('4170040'));
   assert.deepStrictEqual(finals.map(g => g.game_id).sort(), [41700401, 41700402]);
   assert.ok(body.every(g => g.home_team_name === 'Warriors' && g.away_team_name === 'Cavaliers'));
+});
+
+// Worked out directly from the raw tables: the 45 Cavaliers–Warriors meetings,
+// 5Dimes lines, each team's own spread and moneyline.
+test('head to head counts each team against its own line', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const { body } = await get('/matchup/1610612739/1610612744');
+  const [cle, gsw] = body;
+  assert.deepStrictEqual([cle.team_id, gsw.team_id], [1610612739, 1610612744]);
+  assert.deepStrictEqual([cle.total_games, cle.wins, gsw.wins], [45, 17, 28]);
+  assert.deepStrictEqual([cle.covers, gsw.covers, cle.pushes, gsw.pushes], [17, 27, 1, 1]);
+  assert.deepStrictEqual([cle.underdog_games, cle.underdog_wins, gsw.underdog_games, gsw.underdog_wins], [32, 9, 13, 5]);
+  const swapped = (await get('/matchup/1610612744/1610612739')).body;
+  assert.deepStrictEqual(swapped, body);
+});
+
+test('cover rates leave out pushes and average 50% over all teams', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const teams = (await get('/team/search')).body;
+  const rows = await Promise.all(teams.map(async t => (await get(`/team/${t.team_id}/spread_cover`)).body[0]));
+  for (const r of rows) {
+    assert.ok(Math.abs(r.spread_percentage - r.count / (r.total_games - r.pushes)) < 1e-3, r.name);
+  }
+  const mean = rows.reduce((a, r) => a + r.spread_percentage, 0) / rows.length;
+  assert.ok(Math.abs(mean - 0.5) < 0.005, `mean cover rate ${mean}`);
+});
+
+test('arbitrage bets both sides of the same spread', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const { body } = await get('/trivia/arbitrage?page=1');
+  assert.ok(body.length > 0);
+  for (const row of body.slice(0, 5)) {
+    const lines = (await get(`/game/${row.game_id}/betting`)).body;
+    const one = lines.find(l => l.book_name === row.book1);
+    const other = lines.find(l => l.book_name === row.book2);
+    assert.strictEqual(one.spread1, other.spread1);
+    assert.strictEqual(one.spread1, row.away_spread);
+  }
+});
+
+test('% and _ in a search are matched literally', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  assert.strictEqual((await get('/player/search?name=%25%25')).status, 200);
+  assert.deepStrictEqual((await get('/player/search?name=%25%25')).body, []);
+  assert.deepStrictEqual((await get('/team/search?name-or-abbreviation=_')).body, []);
 });
 
 test('arbitrage pairs two different books at plausible prices', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
