@@ -6,10 +6,11 @@ NBA betting analytics: how teams and players performed against the betting lines
 
 ## What it shows
 
-- **Games**: search 14,906 games (2006–07 to 2017–18) by team, season and total points. Each game has its box score, the lines from 10 sportsbooks, and the two teams' record against each other and against the spread.
+- **Games**: search 14,906 games (2006–07 to 2017–18) by team, season and total points. Each game shows who covered the spread and the total, the lines from 10 sportsbooks, the box score, and the two teams' record against each other.
 - **Players**: career averages (box scores from 2003–04 to 2022–23), how often their team covered the spread, and what $100 bets on their team as the underdog would have returned.
 - **Teams**: record, average lines per sportsbook, spread covers and underdog returns.
-- **Trivia**: "middling" opportunities between books, arbitrage between books' spread prices, and the players with the best records against the spread and as underdogs.
+- **Strategies**: how "middling" between two books' lines would have done, and the arbitrage opportunities between books' spread prices.
+- **Leaderboards**: the players with the best records against the spread and as underdogs, and the opposing pairs who shared the most scoring.
 
 ## Architecture
 
@@ -25,7 +26,7 @@ flowchart LR
     API -->|"read-only user,<br/>bound parameters"| DB
 ```
 
-The React app (Chakra UI) is served as static files. The API is one Express app running as a Vercel serverless function, and Vercel's CDN caches its responses for a day, since the data only changes when it is reloaded.
+The React app is served as static files, with no UI library: plain CSS, one self-hosted variable font, and about 76 kB of gzipped JavaScript and CSS. Every game, team and player has its own URL. The API is one Express app running as a Vercel serverless function, and Vercel's CDN caches its responses for a day, since the data only changes when it is reloaded.
 
 ## Data
 

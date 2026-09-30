@@ -1,15 +1,9 @@
 {
-  "short_name": "NBA Betting",
-  "name": "NBA Betting Analytics",
-  "icons": [
-    {
-      "src": "favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ],
+  "short_name": "SportsAnalytics",
+  "name": "SportsAnalytics: NBA results against the betting lines",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#319795",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff"
 }
