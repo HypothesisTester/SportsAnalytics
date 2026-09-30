@@ -40,6 +40,10 @@ function handle(fn) {
     } catch (err) {
       if (err instanceof BadRequest) return res.status(400).json({ error: err.message });
       console.error(err);
+      // A failure may be temporary (e.g. the database was unreachable), so
+      // don't let the CDN keep serving it for a day.
+      res.removeHeader('Vercel-CDN-Cache-Control');
+      res.set('Cache-Control', 'no-store');
       res.status(500).json({ error: 'Database query failed.' });
     }
   };

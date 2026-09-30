@@ -46,7 +46,7 @@ const ColorModeSwitcher = () => {
             icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
             onClick={toggleColorMode}
             aria-label="Toggle color mode"
-            position="fixed"
+            position={{ base: 'absolute', md: 'fixed' }}
             top="1rem"
             right="1rem"
             zIndex="10"
@@ -66,7 +66,7 @@ const HomePage = () => {
         <ChakraProvider theme={theme}>
             <ColorModeScript initialColorMode="light" />
             <ColorModeSwitcher />
-            <Container maxW="7xl" px={{ base: 3, md: 6 }} py={{ base: 8, md: 12 }}>
+            <Container maxW="7xl" px={{ base: 3, md: 6 }} pt={{ base: 16, md: 12 }} pb={{ base: 8, md: 12 }}>
                 <Heading
                     as="h1"
                     size={{ base: 'xl', md: '2xl' }}
