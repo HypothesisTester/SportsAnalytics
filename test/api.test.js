@@ -131,6 +131,73 @@ test('arbitrage bets both sides of the same spread', { skip: !hasDatabase && 'no
   }
 });
 
+test('leaderboards are ranked by the lower end of the 95% interval', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const spread = (await get('/trivia/spread_players?minimum_games=50')).body;
+  const dogs = (await get('/trivia/underdog_players?minimum_games=10')).body;
+  for (const rows of [spread, dogs]) {
+    assert.strictEqual(rows.length, 15);
+    for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i - 1].lower_bound >= rows[i].lower_bound);
+    assert.ok(rows[0].players > rows[0].above_even);
+  }
+  // Wilson lower bound for 41 of 60 (Malik Hairston), from statsmodels.
+  const leader = spread.find(r => r.person_id === 201612);
+  assert.deepStrictEqual([leader.count, leader.total_games - leader.pushes], [41, 60]);
+  assert.ok(Math.abs(leader.lower_bound - 0.557662) < 1e-5);
+  assert.ok(dogs.every(r => r.money_sum_sq > 0));
+});
+
+test('preseason games and games a player sat out are not counted', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  // LeBron James: 1,657 regular season, play-in and playoff games played, 2003-04 to 2022-23.
+  const [avg] = (await get('/player/2544/average_stats')).body;
+  assert.strictEqual(avg.games_played, 1657);
+  const seasons = (await get('/player/2544/seasons')).body;
+  assert.strictEqual(seasons.reduce((a, s) => a + s.games, 0), 1657);
+  assert.strictEqual(seasons.find(s => s.season_year === 2005).games, 92);
+  const [spread] = (await get('/player/2544/spread_performance')).body;
+  const inSeasons = seasons.reduce((a, s) => [a[0] + (s.covers || 0), a[1] + s.spread_games], [0, 0]);
+  assert.deepStrictEqual(inSeasons, [spread.count, spread.total_games]);
+});
+
+// Totals recomputed from the raw CSVs with pandas, independently of the SQL.
+test('backtest totals match an independent recomputation', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const total = rows => rows.reduce((a, r) => ({
+    bets: a.bets + r.bets, wins: a.wins + Number(r.wins), losses: a.losses + Number(r.losses),
+    pushes: a.pushes + Number(r.pushes), profit: a.profit + r.profit,
+  }), { bets: 0, wins: 0, losses: 0, pushes: 0, profit: 0 });
+  const cases = [
+    ['market=spread&venue=home&role=underdog', [4637, 2236, 2337, 64, -24276.69]],
+    ['market=moneyline&role=underdog&min=300', [4513, 715, 3798, 0, -29456]],
+    ['market=total&side=under&type=playoffs', [993, 508, 474, 11, 68.87]],
+  ];
+  for (const [query, [bets, wins, losses, pushes, profit]] of cases) {
+    const t = total((await get(`/backtest?${query}`)).body);
+    assert.deepStrictEqual([t.bets, t.wins, t.losses, t.pushes], [bets, wins, losses, pushes], query);
+    assert.ok(Math.abs(t.profit - profit) < 0.01, `${query}: ${t.profit}`);
+  }
+});
+
+// A -105 team facing a -115 team is the underdog: the lower price is the favourite.
+test('moneyline favourites and underdogs are decided by comparing the two prices', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const count = async role => (await get(`/backtest?market=moneyline&role=${role}`)).body
+    .reduce((a, r) => [a[0] + r.bets, a[1] + Number(r.wins)], [0, 0]);
+  assert.deepStrictEqual(await count('underdog'), [14782, 4589]);
+  assert.deepStrictEqual(await count('favourite'), [14775, 10186]);
+});
+
+test('average lines per sportsbook count every game and average odds as probabilities', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const books = (await get('/team/1610612738/betting')).body;
+  const dimes = books.find(b => b.book_name === '5Dimes');
+  assert.ok(Math.abs(dimes.avg_spread - -1.664) < 0.001, dimes.avg_spread);
+  // No average may fall inside the impossible -100..+100 gap.
+  assert.ok(books.every(b => Math.abs(b.avg_moneyline_price) >= 100), JSON.stringify(books));
+});
+
+test('backtest rejects values outside its lists', async () => {
+  for (const query of ['market=bogus', 'venue=middle', 'book=Nope', 'type=pre', "team=1'"]) {
+    assert.strictEqual((await get(`/backtest?${query}`)).status, 400, query);
+  }
+});
+
 test('% and _ in a search are matched literally', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
   assert.strictEqual((await get('/player/search?name=%25%25')).status, 200);
   assert.deepStrictEqual((await get('/player/search?name=%25%25')).body, []);

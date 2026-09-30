@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { prefetch, useData, usePaged } from '../api';
-import { dec, height, int, minutes, pct, plusMinus } from '../format';
+import { dec, height, int, minutes, pct, plusMinus, season } from '../format';
 import {
   BackLink, Empty, Figure, ListDetail, LoadMore, Loading, Problem, SearchField, Skeleton,
   useDebounced, useSticky, useTitle, useWide,
 } from '../ui';
 import { AgainstTheSpread, AsTheUnderdog, SourceNote } from './betting';
+import { PlayerSeasons } from './seasons';
 
 export default function Players() {
   const { id } = useParams();
@@ -62,19 +63,23 @@ export default function Players() {
   );
 }
 
-const playerPaths = id => [`/player/${id}`, `/player/${id}/average_stats`, `/player/${id}/spread_performance`, `/player/${id}/player_underdog`];
+const playerPaths = id => [
+  `/player/${id}`, `/player/${id}/average_stats`, `/player/${id}/spread_performance`, `/player/${id}/player_underdog`,
+  `/player/${id}/seasons`,
+];
 
 function PlayerDetail({ id }) {
   const info = useData(`/player/${id}`);
   const avgs = useData(`/player/${id}/average_stats`);
   const spread = useData(`/player/${id}/spread_performance`);
   const underdog = useData(`/player/${id}/player_underdog`);
+  const seasons = useData(`/player/${id}/seasons`);
   const p = info.data && info.data[0];
   useTitle(p ? p.display_first_last : null);
 
   if (info.error) return <Problem error={info.error} onRetry={info.retry} what="this player" />;
   // Show the page once everything has arrived (each part is quick), so nothing jumps.
-  if (info.loading || avgs.loading || spread.loading || underdog.loading) return <Loading />;
+  if ([info, avgs, spread, underdog, seasons].some(r => r.loading)) return <Loading />;
   if (!p) return <Empty action={<Link className="button" to="/players">See all players</Link>}>There's no player with that id.</Empty>;
 
   const facts = [
@@ -104,7 +109,12 @@ function PlayerDetail({ id }) {
         <h2>Career averages</h2>
         {!a ? <Skeleton lines={4} /> : !a.games_played ? <p className="muted">No box scores on record.</p> : (
           <>
-            <p className="section__sub">Per game, over {int(a.games_played)} games from 2003–04 to 2022–23.</p>
+            <p className="section__sub">
+              Per game, over {int(a.games_played)} games
+              {seasons.data && seasons.data.length
+                ? ` from ${season(seasons.data[0].season_year)} to ${season(seasons.data[seasons.data.length - 1].season_year)}`
+                : ''}, not counting preseason.
+            </p>
             <div className="figures figures--lead">
               <Figure size="lg" value={dec(a.pts)} label="Points" />
               <Figure size="lg" value={dec(a.reb)} label="Rebounds" />
@@ -127,6 +137,11 @@ function PlayerDetail({ id }) {
       </section>
 
       <section className="section">
+        <h2>By season</h2>
+        <PlayerSeasons data={seasons.data} />
+      </section>
+
+      <section className="section">
         <h2>Against the spread</h2>
         <AgainstTheSpread data={spread.data} subject="In games he played, his team" />
       </section>
@@ -134,7 +149,7 @@ function PlayerDetail({ id }) {
       <section className="section">
         <h2>As the underdog</h2>
         <AsTheUnderdog loading={!underdog.data} subject="His team" games={u && u.total_games} wins={u && u.underdog_wins}
-          total={u && u.total_money} perGame={u && u.money_per_game} />
+          total={u && u.total_money} sumSq={u && u.money_sum_sq} />
         <SourceNote />
       </section>
     </article>

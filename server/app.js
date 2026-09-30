@@ -32,6 +32,7 @@ api.get('/player/:player_id/games', routes.games_for_player);
 api.get('/player/:player_id/average_stats', routes.player_average_stats);
 api.get('/player/:player_id/spread_performance', routes.player_spread_performance);
 api.get('/player/:player_id/player_underdog', routes.player_underdog);
+api.get('/player/:player_id/seasons', routes.player_seasons);
 
 api.get('/team/search', routes.team_search);
 api.get('/team/:team_id', routes.team);
@@ -41,6 +42,7 @@ api.get('/team/:team_id/underdog_wins', routes.team_underdog_wins);
 api.get('/team/:team_id/underdog_money', routes.team_underdog_money);
 api.get('/team/:team_id/top_players', routes.team_top_players);
 api.get('/team/:team_id/spread_cover', routes.team_spread_covering_percentage);
+api.get('/team/:team_id/seasons', routes.team_seasons);
 
 api.get('/trivia/middling_total', routes.middling_total_betting);
 api.get('/trivia/middling_spread', routes.middling_spread_betting);
@@ -48,6 +50,8 @@ api.get('/trivia/arbitrage', routes.trivia_arbitrage);
 api.get('/trivia/top_matchups', routes.trivia_top_matchups);
 api.get('/trivia/spread_players', routes.trivia_spread_players);
 api.get('/trivia/underdog_players', routes.trivia_underdog_players);
+
+api.get('/backtest', routes.backtest);
 
 api.use((req, res) => res.status(404).json({ error: 'Not found' }));
 

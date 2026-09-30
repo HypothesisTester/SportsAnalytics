@@ -3,6 +3,11 @@
 
 const { pool } = require('./db');
 
+// NBA game ids start with 1 for preseason games (2 regular season, 4 playoffs,
+// 5 play-in). Preseason games are listed but left out of every record,
+// average and betting result, as in official statistics.
+const FIRST_COUNTED_GAME = 20000000;
+
 // ---------------------------------------------------------------- helpers
 
 class BadRequest extends Error {}
@@ -30,6 +35,13 @@ function contains(text) {
  * (+150 wins $150; -150 wins $66.67).
  */
 const payout = price => `IF(${price} > 0, ${price}, 10000 / -${price})`;
+
+/** SQL for the implied win probability of American odds: the break-even win rate. */
+const implied = price => `IF(${price} < 0, -${price} / (100 - ${price}), 100 / (100 + ${price}))`;
+
+// A team is the moneyline underdog when its price is higher than its
+// opponent's: +150 against -170, but also -105 against -115 (3,029 lines have
+// both prices negative). Equal prices make neither team the underdog.
 
 function page(req) {
   return Math.max(1, Math.floor(num(req.query.page, 1)));
@@ -59,6 +71,28 @@ function handle(fn) {
     }
   };
 }
+
+// ---------------------------------------------------------------- statistics
+// 95% intervals, computed in SQL where a list is ranked by them. The same
+// formulas are in client/src/stats.js for display.
+
+const Z = 1.959963984540054;
+
+/** SQL for the lower end of the Wilson 95% interval of `k` successes in `n` trials. */
+const wilsonLower = (k, n) =>
+  `((${k}) / (${n}) + ${Z * Z} / (2 * (${n})) - ${Z} * SQRT((${k}) / (${n}) * (1 - (${k}) / (${n})) / (${n})
+     + ${Z * Z} / (4 * (${n}) * (${n})))) / (1 + ${Z * Z} / (${n}))`;
+
+// Two-sided 95% critical values of Student's t for 1..30 degrees of freedom.
+const T975 = [12.7062, 4.3027, 3.1824, 2.7764, 2.5706, 2.4469, 2.3646, 2.3060, 2.2622, 2.2281, 2.2010, 2.1788, 2.1604, 2.1448, 2.1314, 2.1199, 2.1098, 2.1009, 2.0930, 2.0860, 2.0796, 2.0739, 2.0687, 2.0639, 2.0595, 2.0555, 2.0518, 2.0484, 2.0452, 2.0423];
+
+/** SQL for t(0.975, df); past 30 degrees of freedom 1.96 + 2.5/df is within 0.002. */
+const tCritical = df => `IF((${df}) <= 30, ELT((${df}), ${T975.join(', ')}), ${Z} + 2.5 / (${df}))`;
+
+/** SQL for the lower end of the 95% t interval of a mean, from n, the sum and the sum of squares. */
+const meanLower = (n, sum, sumSq) =>
+  `(${sum}) / (${n}) - ${tCritical(`(${n}) - 1`)}
+     * SQRT(GREATEST((${sumSq}) - (${sum}) * (${sum}) / (${n}), 0) / ((${n}) - 1) / (${n}))`;
 
 // ---------------------------------------------------------------- games
 
@@ -108,12 +142,14 @@ const matchup_stats = (req, res) => {
     `WITH meetings AS (
         SELECT g.game_id, g.team_id, g.pts, o.pts AS opp_pts, g.wl
         FROM game_data g JOIN game_data o ON o.game_id = g.game_id AND o.team_id = g.a_team_id
-        WHERE (g.team_id = ? AND g.a_team_id = ?) OR (g.team_id = ? AND g.a_team_id = ?)
+        WHERE ((g.team_id = ? AND g.a_team_id = ?) OR (g.team_id = ? AND g.a_team_id = ?))
+          AND g.game_id >= ${FIRST_COUNTED_GAME}
     ),
     dimes AS (
         SELECT m.game_id, m.team_id,
                IF(bd.team_id = m.team_id, bd.spread1, bd.spread2) AS spread,
-               IF(bd.team_id = m.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline
+               IF(bd.team_id = m.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline,
+               IF(bd.team_id = m.team_id, bd.moneyline_price2, bd.moneyline_price1) AS opp_moneyline
         FROM meetings m JOIN betting_data bd ON bd.game_id = m.game_id AND bd.book_name = '5Dimes'
     ),
     books AS (
@@ -127,9 +163,9 @@ const matchup_stats = (req, res) => {
            COUNT(d.spread) AS spread_games,
            SUM(m.pts - m.opp_pts + d.spread > 0) AS covers,
            SUM(m.pts - m.opp_pts + d.spread = 0) AS pushes,
-           SUM(d.moneyline > 0) AS underdog_games,
-           SUM(d.moneyline > 0 AND m.wl = 'W') AS underdog_wins,
-           SUM(IF(d.moneyline > 0, IF(m.wl = 'W', d.moneyline, -100), 0)) AS underdog_money
+           SUM(d.moneyline > d.opp_moneyline) AS underdog_games,
+           SUM(d.moneyline > d.opp_moneyline AND m.wl = 'W') AS underdog_wins,
+           SUM(IF(d.moneyline > d.opp_moneyline, IF(m.wl = 'W', ${payout('d.moneyline')}, -100), 0)) AS underdog_money
     FROM meetings m
     LEFT JOIN dimes d ON d.game_id = m.game_id AND d.team_id = m.team_id
     LEFT JOIN books bk ON bk.team_id = m.team_id
@@ -156,6 +192,7 @@ const matchup_top_pairs = (req, res) => {
      JOIN players P1 ON P1.person_id = PS1.player_id
      JOIN players P2 ON P2.person_id = PS2.player_id
      WHERE G1.team_id = ? AND G1.a_team_id = ? AND PS1.pts IS NOT NULL AND PS2.pts IS NOT NULL
+       AND G1.game_id >= ${FIRST_COUNTED_GAME}
      GROUP BY PS1.player_id, PS2.player_id
      HAVING total_games >= 3
      ORDER BY avg_pct_pts DESC, PS1.player_id, PS2.player_id
@@ -252,9 +289,9 @@ const player_average_stats = (req, res) =>
             AVG(fg3a) AS fg3a, AVG(fg3_pct) AS fg3_pct, AVG(ftm) AS ftm, AVG(fta) AS fta, AVG(ft_pct) AS ft_pct,
             AVG(oreb) AS oreb, AVG(dreb) AS dreb, AVG(reb) AS reb, AVG(ast) AS ast, AVG(stl) AS stl,
             AVG(blk) AS blk, AVG(tov) AS tov, AVG(pf) AS pf, AVG(pts) AS pts, AVG(plus_minus) AS plus_minus,
-            COUNT(*) AS games_played
+            COUNT(min) AS games_played
      FROM player_stats
-     WHERE player_id = ?`,
+     WHERE player_id = ? AND game_id >= ${FIRST_COUNTED_GAME}`,
     [id(req.params.player_id)],
   )(req, res);
 
@@ -263,17 +300,19 @@ const player_average_stats = (req, res) =>
 const player_underdog = (req, res) =>
   sendRows(
     `SELECT P.person_id AS player_id, P.display_first_last, COUNT(*) AS total_games,
-            SUM(IF(r.wl = 'W', r.moneyline, -100)) AS total_money,
-            SUM(IF(r.wl = 'W', r.moneyline, -100)) / COUNT(*) AS money_per_game,
+            SUM(IF(r.wl = 'W', ${payout('r.moneyline')}, -100)) AS total_money,
+            SUM(IF(r.wl = 'W', ${payout('r.moneyline')}, -100)) / COUNT(*) AS money_per_game,
+            SUM(POW(IF(r.wl = 'W', ${payout('r.moneyline')}, -100), 2)) AS money_sum_sq,
             SUM(r.wl = 'W') AS underdog_wins
      FROM players P JOIN (
-         SELECT ps.player_id, g.wl, IF(bd.team_id = ps.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline
+         SELECT ps.player_id, g.wl, IF(bd.team_id = ps.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline,
+                IF(bd.team_id = ps.team_id, bd.moneyline_price2, bd.moneyline_price1) AS opp_moneyline
          FROM player_stats ps
          JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
          JOIN betting_data bd ON bd.game_id = ps.game_id AND bd.book_name = '5Dimes'
-         WHERE ps.player_id = ?
+         WHERE ps.player_id = ? AND ps.min IS NOT NULL AND ps.game_id >= ${FIRST_COUNTED_GAME}
      ) r ON r.player_id = P.person_id
-     WHERE r.moneyline > 0
+     WHERE r.moneyline > r.opp_moneyline
      GROUP BY P.person_id, P.display_first_last`,
     [id(req.params.player_id)],
   )(req, res);
@@ -294,7 +333,7 @@ const player_spread_performance = (req, res) => {
          JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
          JOIN game_data o ON o.game_id = ps.game_id AND o.team_id = g.a_team_id
          JOIN betting_data bd ON bd.game_id = ps.game_id AND bd.book_name = '5Dimes'
-         WHERE ps.player_id = ?
+         WHERE ps.player_id = ? AND ps.min IS NOT NULL AND ps.game_id >= ${FIRST_COUNTED_GAME}
      ) r ON r.player_id = P.person_id
      WHERE P.person_id = ?
      GROUP BY P.person_id, P.display_first_last`,
@@ -320,7 +359,7 @@ const team = (req, res) =>
         SELECT team_id, SUM(IF(wl = 'W', 1, 0)) AS number_wins, SUM(IF(wl = 'L', 1, 0)) AS number_losses,
                AVG(pts) AS avg_points, AVG(reb) AS avg_rebounds, AVG(ast) AS avg_assists
         FROM game_data
-        WHERE team_id = ?
+        WHERE team_id = ? AND game_id >= ${FIRST_COUNTED_GAME}
         GROUP BY team_id
     )
     SELECT name, abbreviation, teams.team_id, number_wins, number_losses, avg_points, avg_rebounds, avg_assists,
@@ -342,12 +381,19 @@ const games_for_team = (req, res) =>
 // GET /team/:team_id/betting — the team's average lines, per sportsbook.
 const team_game_betting_data = (req, res) => {
   const t = id(req.params.team_id);
+  // Every game counts once (UNION ALL). Odds are averaged as break-even
+  // probabilities and turned back into odds: averaging -110 and +110 as
+  // numbers would give 0, a price that can't exist.
   return sendRows(
-    `SELECT book_name, AVG(moneyline) AS avg_moneyline_price, AVG(spread) AS avg_spread, AVG(total1) AS avg_total
+    `SELECT book_name,
+            IF(AVG(p) >= 0.5, -100 * AVG(p) / (1 - AVG(p)), 100 * (1 - AVG(p)) / AVG(p)) AS avg_moneyline_price,
+            AVG(spread) AS avg_spread, AVG(total1) AS avg_total
      FROM (
-         SELECT book_name, moneyline_price1 AS moneyline, spread1 AS spread, total1 FROM betting_data WHERE team_id = ?
-         UNION
-         SELECT book_name, moneyline_price2 AS moneyline, spread2 AS spread, total1 FROM betting_data WHERE a_team_id = ?
+         SELECT book_name, ${implied('moneyline_price1')} AS p, spread1 AS spread, total1
+         FROM betting_data WHERE team_id = ? AND game_id >= ${FIRST_COUNTED_GAME}
+         UNION ALL
+         SELECT book_name, ${implied('moneyline_price2')} AS p, spread2 AS spread, total1
+         FROM betting_data WHERE a_team_id = ? AND game_id >= ${FIRST_COUNTED_GAME}
      ) T
      GROUP BY book_name
      ORDER BY book_name`,
@@ -361,14 +407,16 @@ const team_underdog = (req, res) =>
   sendRows(
     `SELECT T.team_id, T.name, COUNT(*) AS total_games, SUM(r.wl = 'W') AS count,
             SUM(r.wl = 'W') / COUNT(*) AS percentage,
-            SUM(IF(r.wl = 'W', r.moneyline, -100)) AS money,
-            SUM(IF(r.wl = 'W', r.moneyline, -100)) / COUNT(*) AS money_per_game
+            SUM(IF(r.wl = 'W', ${payout('r.moneyline')}, -100)) AS money,
+            SUM(IF(r.wl = 'W', ${payout('r.moneyline')}, -100)) / COUNT(*) AS money_per_game,
+            SUM(POW(IF(r.wl = 'W', ${payout('r.moneyline')}, -100), 2)) AS money_sum_sq
      FROM teams T JOIN (
-         SELECT g.team_id, g.wl, IF(bd.team_id = g.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline
+         SELECT g.team_id, g.wl, IF(bd.team_id = g.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline,
+                IF(bd.team_id = g.team_id, bd.moneyline_price2, bd.moneyline_price1) AS opp_moneyline
          FROM game_data g JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = '5Dimes'
-         WHERE g.team_id = ?
+         WHERE g.team_id = ? AND g.game_id >= ${FIRST_COUNTED_GAME}
      ) r ON r.team_id = T.team_id
-     WHERE r.moneyline > 0
+     WHERE r.moneyline > r.opp_moneyline
      GROUP BY T.team_id, T.name`,
     [id(req.params.team_id)],
   )(req, res);
@@ -376,7 +424,8 @@ const team_underdog_wins = team_underdog;
 const team_underdog_money = team_underdog;
 
 
-// GET /team/:team_id/top_players?num_players= — highest average points + rebounds + assists.
+// GET /team/:team_id/top_players?num_players= — highest average points + rebounds + assists,
+// among players with at least 20 games for the team.
 const team_top_players = (req, res) => {
   const t = id(req.params.team_id);
   const limit = Math.min(100, Math.max(1, Math.floor(num(req.query.num_players, 15))));
@@ -385,8 +434,9 @@ const team_top_players = (req, res) => {
         SELECT player_id, team_id, AVG(pts) AS avg_pts, AVG(ast) AS avg_ast, AVG(reb) AS avg_reb,
                AVG(stl) AS avg_stl, AVG(blk) AS avg_blk, AVG(min) AS avg_min
         FROM player_stats
-        WHERE team_id = ?
+        WHERE team_id = ? AND game_id >= ${FIRST_COUNTED_GAME}
         GROUP BY player_id, team_id
+        HAVING COUNT(min) >= 20
     )
     SELECT player_id, display_first_last, avg_pts, avg_ast, avg_reb, avg_pts + avg_ast + avg_reb AS avg_PRA,
            avg_stl, avg_blk, avg_min
@@ -410,10 +460,53 @@ const team_spread_covering_percentage = (req, res) =>
          FROM game_data g
          JOIN game_data o ON o.game_id = g.game_id AND o.team_id = g.a_team_id
          JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = '5Dimes'
-         WHERE g.team_id = ?
+         WHERE g.team_id = ? AND g.game_id >= ${FIRST_COUNTED_GAME}
      ) r ON r.team_id = T.team_id
      GROUP BY T.team_id, T.name`,
     [id(req.params.team_id)],
+  )(req, res);
+
+// GET /team/:team_id/seasons — the team's record in each season (playoffs
+// included): wins, points, and its 5Dimes spread and underdog results.
+const team_seasons = (req, res) =>
+  sendRows(
+    `SELECT r.season_year, COUNT(*) AS games, SUM(r.wl = 'W') AS wins, AVG(r.pts) AS avg_pts,
+            SUM(r.margin > 0) AS covers, SUM(r.margin = 0) AS pushes, COUNT(r.margin) AS spread_games,
+            SUM(r.moneyline > r.opp_moneyline) AS underdog_games,
+            SUM(r.moneyline > r.opp_moneyline AND r.wl = 'W') AS underdog_wins
+     FROM (
+         SELECT g.season_year, g.wl, g.pts,
+                g.pts - o.pts + IF(bd.team_id = g.team_id, bd.spread1, bd.spread2) AS margin,
+                IF(bd.team_id = g.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline,
+                IF(bd.team_id = g.team_id, bd.moneyline_price2, bd.moneyline_price1) AS opp_moneyline
+         FROM game_data g
+         JOIN game_data o ON o.game_id = g.game_id AND o.team_id = g.a_team_id
+         LEFT JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = '5Dimes'
+         WHERE g.team_id = ? AND g.game_id >= ${FIRST_COUNTED_GAME}
+     ) r
+     GROUP BY r.season_year
+     ORDER BY r.season_year`,
+    [id(req.params.team_id)],
+  )(req, res);
+
+// GET /player/:player_id/seasons — the player's averages in each season he
+// played, and how often his team covered the 5Dimes spread in those games
+// (lines exist for 2006–07 to 2017–18 only).
+const player_seasons = (req, res) =>
+  sendRows(
+    `SELECT ps.season_year, COUNT(*) AS games, AVG(ps.pts) AS pts, AVG(ps.reb) AS reb, AVG(ps.ast) AS ast,
+            AVG(ps.min) AS min,
+            SUM(g.pts - o.pts + IF(bd.team_id = ps.team_id, bd.spread1, bd.spread2) > 0) AS covers,
+            SUM(g.pts - o.pts + IF(bd.team_id = ps.team_id, bd.spread1, bd.spread2) = 0) AS pushes,
+            COUNT(bd.game_id) AS spread_games
+     FROM player_stats ps
+     LEFT JOIN game_data g ON g.game_id = ps.game_id AND g.team_id = ps.team_id
+     LEFT JOIN game_data o ON o.game_id = ps.game_id AND o.team_id = g.a_team_id
+     LEFT JOIN betting_data bd ON bd.game_id = ps.game_id AND bd.book_name = '5Dimes' AND g.game_id IS NOT NULL
+     WHERE ps.player_id = ? AND ps.min IS NOT NULL AND ps.game_id >= ${FIRST_COUNTED_GAME}
+     GROUP BY ps.season_year
+     ORDER BY ps.season_year`,
+    [id(req.params.player_id)],
   )(req, res);
 
 // ---------------------------------------------------------------- trivia
@@ -434,9 +527,9 @@ const middling_total_betting = (req, res) =>
          FROM betting_data B1 JOIN betting_data B2 ON B1.game_id = B2.game_id AND B1.book_name <> B2.book_name
          JOIN game_data G1 ON B1.game_id = G1.game_id AND B1.team_id = G1.team_id
          JOIN game_data G2 ON B1.game_id = G2.game_id AND B1.a_team_id = G2.team_id
-         WHERE B1.total1 <= B2.total1 - ?
+         WHERE B1.total1 <= B2.total1 - ? AND B1.game_id >= ${FIRST_COUNTED_GAME}
      ) m`,
-    req => [num(req.query.threshold, 2)],
+    req => [Math.max(0.5, num(req.query.threshold, 2))],
     [],
   )(req, res);
 
@@ -445,19 +538,19 @@ const middling_total_betting = (req, res) =>
 // the book giving the away team more, each at its own price.
 const middling_spread_betting = (req, res) =>
   sendRows(
-    `SELECT SUM(IF(margin < -lo, ${payout('home_price')}, IF(margin = -lo, 0, -100))
+    `SELECT SUM(IF(margin < home_line, ${payout('home_price')}, IF(margin = home_line, 0, -100))
               + IF(margin > -hi, ${payout('away_price')}, IF(margin = -hi, 0, -100))) AS middle_total_money,
-            SUM(margin < -lo AND margin > -hi) AS middles_total_won,
-            SUM(NOT (margin < -lo AND margin > -hi)) AS middles_total_lost
+            SUM(margin < home_line AND margin > -hi) AS middles_total_won,
+            SUM(NOT (margin < home_line AND margin > -hi)) AS middles_total_lost
      FROM (
-         SELECT G1.pts - G2.pts AS margin, B1.spread1 AS lo, B1.spread_price2 AS home_price,
+         SELECT G1.pts - G2.pts AS margin, B1.spread2 AS home_line, B1.spread_price2 AS home_price,
                 B2.spread1 AS hi, B2.spread_price1 AS away_price
          FROM betting_data B1 JOIN betting_data B2 ON B1.game_id = B2.game_id AND B1.book_name <> B2.book_name
          JOIN game_data G1 ON B1.game_id = G1.game_id AND B1.team_id = G1.team_id
          JOIN game_data G2 ON B1.game_id = G2.game_id AND B1.a_team_id = G2.team_id
-         WHERE B1.spread1 <= B2.spread1 - ?
+         WHERE B1.spread1 <= B2.spread1 - ? AND B1.game_id >= ${FIRST_COUNTED_GAME}
      ) m`,
-    req => [num(req.query.threshold, 2)],
+    req => [Math.max(0.5, num(req.query.threshold, 2))],
     [],
   )(req, res);
 
@@ -496,40 +589,176 @@ const trivia_top_matchups = (req, res) =>
   )(req, res);
 
 // GET /trivia/spread_players?minimum_games= — players whose teams covered the
-// 5Dimes spread most often. Totals precomputed in player_spread_totals.
+// 5Dimes spread most often, ranked by the lower end of the Wilson 95% interval so
+// a short streak can't top the list. Every row also carries how many players
+// qualified and how many have an interval entirely above 50%.
 const trivia_spread_players = (req, res) =>
   sendRows(
-    `SELECT P.person_id, P.display_first_last, T.spread_covers AS count, T.pushes, T.total_games,
-            T.spread_covers / NULLIF(T.total_games - T.pushes, 0) AS spread_percentage
-     FROM player_spread_totals T
-     JOIN players P ON T.player_id = P.person_id
-     WHERE T.total_games >= ?
-     ORDER BY spread_percentage DESC, P.person_id
+    `SELECT * FROM (
+         SELECT P.person_id, P.display_first_last, T.spread_covers AS count, T.pushes, T.total_games,
+                T.spread_covers / (T.total_games - T.pushes) AS spread_percentage,
+                ${wilsonLower('T.spread_covers', 'T.total_games - T.pushes')} AS lower_bound,
+                COUNT(*) OVER () AS players,
+                SUM(${wilsonLower('T.spread_covers', 'T.total_games - T.pushes')} > 0.5) OVER () AS above_even
+         FROM player_spread_totals T
+         JOIN players P ON T.player_id = P.person_id
+         WHERE T.total_games >= ? AND T.total_games > T.pushes
+     ) ranked
+     ORDER BY lower_bound DESC, person_id
      LIMIT 15`,
     req => [num(req.query.minimum_games, 0)],
   )(req, res);
 
-// GET /trivia/underdog_players?minimum_games= — best returns per game when the
-// player's team was the underdog. Totals precomputed in player_underdog_totals.
+// GET /trivia/underdog_players?minimum_games= — the best returns per game from
+// $100 on the player's team whenever it was the underdog, ranked by the lower end
+// of the 95% t interval of that return. Totals precomputed in
+// player_underdog_totals; rows carry the qualifying count and how many have an
+// interval entirely above zero. The t interval needs a reasonable sample (a
+// player 2 for 2 would look certain), so at least 30 games are required.
 const trivia_underdog_players = (req, res) =>
   sendRows(
-    `SELECT T.player_id, P.display_first_last, T.total_games, T.total_money,
-            T.total_money / T.total_games AS money_per_game, T.underdog_wins
-     FROM player_underdog_totals T
-     JOIN players P ON T.player_id = P.person_id
-     WHERE T.total_games >= ?
-     ORDER BY money_per_game DESC, T.player_id
+    `SELECT * FROM (
+         SELECT T.player_id, P.display_first_last, T.total_games, T.total_money, T.sum_sq_money AS money_sum_sq,
+                T.total_money / T.total_games AS money_per_game, T.underdog_wins,
+                ${meanLower('T.total_games', 'T.total_money', 'T.sum_sq_money')} AS lower_bound,
+                COUNT(*) OVER () AS players,
+                SUM(${meanLower('T.total_games', 'T.total_money', 'T.sum_sq_money')} > 0) OVER () AS above_even
+         FROM player_underdog_totals T
+         JOIN players P ON T.player_id = P.person_id
+         WHERE T.total_games >= GREATEST(?, 30)
+     ) ranked
+     ORDER BY lower_bound DESC, player_id
      LIMIT 15`,
     req => [num(req.query.minimum_games, 0)],
   )(req, res);
+
+// ---------------------------------------------------------------- backtest
+
+const BOOKS = ['5Dimes', 'BetOnline', 'Bookmaker', 'Bovada', 'Heritage', 'Intertops', 'JustBet', 'Pinnacle Sports',
+  'Sportsbetting', 'YouWager'];
+
+/** One of the allowed values of a query parameter, or a 400. */
+function oneOf(value, allowed, fallback) {
+  const v = value === undefined || value === '' ? fallback : String(value);
+  if (!allowed.includes(v)) throw new BadRequest(`Unexpected value: ${v}`);
+  return v;
+}
+
+
+// GET /backtest — $100 on every bet matching a rule, 2006-07 to 2017-18.
+//   market   spread | moneyline | total
+//   venue    any | home | away          (spread and moneyline: which team is bet on)
+//   role     any | favourite | underdog (spread and moneyline)
+//   side     over | under               (total)
+//   min, max the bet's line: the team's spread, its moneyline odds, or the total
+//   from, to seasons (2006 = 2006-07); type all | regular | playoffs
+//   team     a team id: bet on that team (spread, moneyline) or its games (total)
+//   book     one of BOOKS
+// Returns per-month totals (bets, wins, losses, pushes, profit, sum of squared
+// profit, sum of break-even rates) for the charts and intervals. Preseason games
+// and prices that are plainly errors in the source (spread or total prices
+// outside ±100..300, moneylines beyond ±5000) are left out. Every value from
+// the request is a bound parameter; only whitelisted SQL fragments vary.
+const backtest = async (req, res) => {
+  const q = req.query;
+  const market = oneOf(q.market, ['spread', 'moneyline', 'total'], 'spread');
+  const venue = oneOf(q.venue, ['any', 'home', 'away'], 'any');
+  const role = oneOf(q.role, ['any', 'favourite', 'underdog'], 'any');
+  const side = oneOf(q.side, ['over', 'under'], 'over');
+  const type = oneOf(q.type, ['all', 'regular', 'playoffs'], 'all');
+  const book = oneOf(q.book, BOOKS, '5Dimes');
+  const from = Math.max(2006, Math.min(2017, Math.floor(num(q.from, 2006))));
+  const to = Math.max(from, Math.min(2017, Math.floor(num(q.to, 2017))));
+  const min = num(q.min);
+  const max = num(q.max);
+  const team = q.team ? id(q.team) : null;
+
+  const where = [`g.game_id >= ${FIRST_COUNTED_GAME}`, 'g.season_year BETWEEN ? AND ?'];
+  const params = [book, from, to];
+  if (type !== 'all') {
+    where.push('g.season_type = ?');
+    params.push(type === 'playoffs' ? 'Playoffs' : 'Regular Season');
+  }
+
+  let line;
+  let price;
+  let result;
+  if (market === 'total') {
+    // One row per game (the home team's), betting the over or under.
+    line = 'bd.total1';
+    price = side === 'over' ? 'bd.total_price1' : 'bd.total_price2';
+    const diff = '(g.pts + o.pts - bd.total1)';
+    result = side === 'over' ? `SIGN${diff}` : `-SIGN${diff}`;
+    where.push("g.is_home = 't'", 'bd.total1 IS NOT NULL', `ABS(${price}) BETWEEN 100 AND 300`);
+    if (team) {
+      where.push('(g.team_id = ? OR g.a_team_id = ?)');
+      params.push(team, team);
+    }
+  } else {
+    // One row per team per game, betting on that team.
+    const mine = (a, b) => `IF(bd.team_id = g.team_id, bd.${a}, bd.${b})`;
+    if (market === 'spread') {
+      line = mine('spread1', 'spread2');
+      price = mine('spread_price1', 'spread_price2');
+      result = `SIGN(g.pts - o.pts + ${line})`;
+      where.push(`${line} IS NOT NULL`, `ABS(${price}) BETWEEN 100 AND 300`);
+    } else {
+      line = mine('moneyline_price1', 'moneyline_price2');
+      price = line;
+      result = "IF(g.wl = 'W', 1, -1)";
+      where.push(`${line} IS NOT NULL`, `ABS(${line}) BETWEEN 100 AND 5000`);
+    }
+    if (venue !== 'any') where.push(venue === 'home' ? "g.is_home = 't'" : "g.is_home = 'f'");
+    if (role !== 'any') {
+      // On the spread the favourite gives points (a pick'em, 0, is neither); on
+      // the moneyline the favourite has the lower of the two prices.
+      const other = market === 'spread' ? '0' : mine('moneyline_price2', 'moneyline_price1');
+      where.push(role === 'favourite' ? `${line} < ${other}` : `${line} > ${other}`);
+    }
+    if (team) {
+      where.push('g.team_id = ?');
+      params.push(team);
+    }
+  }
+  if (min !== null) {
+    where.push(`${line} >= ?`);
+    params.push(min);
+  }
+  if (max !== null) {
+    where.push(`${line} <= ?`);
+    params.push(max);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT YEAR(b.game_date) AS year, MONTH(b.game_date) AS month, MIN(b.season_year) AS season,
+            COUNT(*) AS bets, SUM(b.result = 1) AS wins, SUM(b.result = -1) AS losses, SUM(b.result = 0) AS pushes,
+            SUM(b.profit) AS profit, SUM(b.profit * b.profit) AS sum_sq, SUM(b.break_even) AS break_even
+     FROM (
+         SELECT x.game_date, x.season_year, x.result,
+                CASE x.result WHEN 1 THEN ${payout('x.price')} WHEN 0 THEN 0 ELSE -100 END AS profit,
+                ${implied('x.price')} AS break_even
+         FROM (
+             SELECT g.game_date, g.season_year, ${result} AS result, ${price} AS price
+             FROM game_data g
+             JOIN game_data o ON o.game_id = g.game_id AND o.team_id = g.a_team_id
+             JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = ?
+             WHERE ${where.join(' AND ')}
+         ) x
+     ) b
+     GROUP BY year, month
+     ORDER BY year, month`,
+    params,
+  );
+  res.json(rows);
+};
 
 const handlers = {
   game, game_players, game_betting, matchup_stats, matchup_top_pairs, game_search,
   player_search, player_information, games_for_player, player_average_stats, player_underdog, player_spread_performance,
   team_search, team, games_for_team, team_game_betting_data, team_underdog_wins, team_underdog_money,
-  team_top_players, team_spread_covering_percentage,
+  team_top_players, team_spread_covering_percentage, team_seasons, player_seasons,
   middling_total_betting, middling_spread_betting, trivia_arbitrage, trivia_top_matchups,
-  trivia_spread_players, trivia_underdog_players,
+  trivia_spread_players, trivia_underdog_players, backtest,
 };
 
 module.exports = Object.fromEntries(Object.entries(handlers).map(([name, fn]) => [name, handle(fn)]));
