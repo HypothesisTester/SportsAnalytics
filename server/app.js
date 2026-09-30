@@ -51,6 +51,8 @@ api.get('/trivia/top_matchups', routes.trivia_top_matchups);
 api.get('/trivia/spread_players', routes.trivia_spread_players);
 api.get('/trivia/underdog_players', routes.trivia_underdog_players);
 
+api.get('/backtest', routes.backtest);
+
 api.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.use('/api', api);

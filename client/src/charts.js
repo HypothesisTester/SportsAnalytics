@@ -4,7 +4,7 @@
 // available as a table (SeasonTable), so the tooltip never gates a value.
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { BREAK_EVEN, pct } from './format';
-import { wilson } from './stats';
+import { wilson, Z } from './stats';
 
 const M = { top: 18, right: 8, bottom: 26, left: 40 };
 
@@ -174,6 +174,109 @@ export function SeasonTable({ rows, columns }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------- cumulative profit */
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Round numbers for an axis spanning [lo, hi]: about five steps of 1, 2 or 5 × 10^k. */
+function niceTicks(lo, hi) {
+  const span = hi - lo || 1;
+  const raw = span / 5;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const ticks = [];
+  for (let t = Math.floor(lo / step) * step; t <= hi + step * 1e-6; t += step) ticks.push(Math.round(t * 100) / 100);
+  return ticks;
+}
+
+/**
+ * Running profit of $100 bets, month by month, over a band showing where a
+ * bettor with no edge (winning exactly the break-even rate) would be 95% of the
+ * time after the same number of bets. rows: per-month totals in date order.
+ */
+export function ProfitChart({ rows, sd, format, label }) {
+  const [ref, width] = useWidth();
+  const [active, setActive] = useState(null);
+  const height = 260;
+  const m = { top: 16, right: 12, bottom: 28, left: 64 };
+  const plotW = Math.max(0, width - m.left - m.right);
+  const plotH = height - m.top - m.bottom;
+
+  let bets = 0;
+  let profit = 0;
+  const points = rows.map(r => {
+    bets += r.bets;
+    profit += r.profit;
+    return { ...r, cumBets: bets, cumProfit: profit, band: Z * sd * Math.sqrt(bets) * 1 };
+  });
+  const values = points.flatMap(p => [p.cumProfit, p.band, -p.band]);
+  const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values));
+  const [lo, hi] = [ticks[0], ticks[ticks.length - 1]];
+  const x = i => m.left + (points.length > 1 ? (i / (points.length - 1)) * plotW : plotW / 2);
+  const y = v => m.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.cumProfit)}`).join('');
+  const band = `${points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.band)}`).join('')}${points
+    .map((p, i) => `L${x(points.length - 1 - i)},${y(-points[points.length - 1 - i].band)}`).join('')}Z`;
+  const seasonStarts = points.map((p, i) => (i === 0 || p.season !== points[i - 1].season ? i : null)).filter(i => i != null);
+  const everySeason = Math.max(1, Math.ceil(48 / Math.max(1, plotW / Math.max(1, seasonStarts.length))));
+  const last = points[points.length - 1];
+
+  const nearest = clientX => {
+    const box = ref.current.getBoundingClientRect();
+    const t = (clientX - box.left - m.left) / Math.max(plotW, 1);
+    return Math.max(0, Math.min(points.length - 1, Math.round(t * (points.length - 1))));
+  };
+  const a = active != null ? points[active] : null;
+
+  return (
+    <div className="chart" ref={ref}>
+      <div className="chart__legend" aria-hidden="true">
+        <span><i className="key key--line key--thick" />Running total</span>
+        <span><i className="key key--band" />Where no edge would be, 95% of the time</span>
+      </div>
+      {width > 0 && points.length > 0 && (
+        <svg width={width} height={height} role="img" aria-label={label} tabIndex={0}
+          onPointerMove={e => setActive(nearest(e.clientX))}
+          onPointerLeave={() => setActive(null)}
+          onFocus={() => setActive(a2 => (a2 == null ? points.length - 1 : a2))}
+          onBlur={() => setActive(null)}
+          onKeyDown={e => {
+            if (e.key === 'ArrowLeft') setActive(i => Math.max(0, (i == null ? points.length : i) - 1));
+            if (e.key === 'ArrowRight') setActive(i => Math.min(points.length - 1, (i == null ? -1 : i) + 1));
+          }}>
+          {ticks.map(t => (
+            <g key={t}>
+              <line className={t === 0 ? 'chart__zero' : 'chart__grid'} x1={m.left} x2={width - m.right} y1={y(t)} y2={y(t)} />
+              <text className="chart__tick" x={m.left - 8} y={y(t)} dy="0.32em" textAnchor="end">{format(t)}</text>
+            </g>
+          ))}
+          <path className="chart__band" d={band} />
+          <path className="chart__line" d={line} />
+          {seasonStarts.filter((_, k) => k % everySeason === 0).map(i => (
+            <text key={i} className="chart__season" x={x(i)} y={height - 8} textAnchor="start">{shortSeason(points[i].season)}</text>
+          ))}
+          <circle className={`chart__dot${last.cumProfit > 0 ? ' is-beat' : ''}`} cx={x(points.length - 1)} cy={y(last.cumProfit)} r={4.5} />
+          {a && (
+            <g className="chart__cross">
+              <line x1={x(active)} x2={x(active)} y1={m.top} y2={m.top + plotH} />
+              <circle cx={x(active)} cy={y(a.cumProfit)} r={4.5} />
+            </g>
+          )}
+        </svg>
+      )}
+      {a && (
+        <div className={`chart__tip${x(active) > width / 2 ? ' is-left' : ''}`} aria-hidden="true"
+          style={{ left: x(active) + (x(active) > width / 2 ? -10 : 10), top: m.top + 30 }}>
+          <strong>{MONTHS[a.month - 1]} {a.year}</strong>
+          <span>{format(a.cumProfit)} after {a.cumBets.toLocaleString('en-US')} bets</span>
+          <span>No-edge range {format(-a.band)} to {format(a.band)}</span>
+        </div>
+      )}
     </div>
   );
 }

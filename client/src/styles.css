@@ -943,6 +943,64 @@ button, input, select { font: inherit; color: inherit; }
 .ranking__figure { font-size: 19px; font-stretch: 78%; font-weight: 660; font-variant-numeric: tabular-nums; }
 .versus { color: var(--faint); font-weight: 400; }
 
+/* Strategy tester */
+
+.presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.chip {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.chip:hover { background: var(--raised); }
+.chip.is-active { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+
+.rule {
+  display: grid;
+  gap: 18px;
+  padding: 20px 0 22px;
+  margin-bottom: 36px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.rule__row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-end; }
+.rule__group { display: grid; gap: 6px; }
+.rule__group .segmented { margin-bottom: 0; }
+.rule__label { font-size: 12.5px; color: var(--muted); }
+.rule__row--fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 12px 12px;
+}
+.rule__hint { font-size: 12.5px; color: var(--muted); margin-top: -6px; }
+
+.results { transition: opacity 0.2s; }
+.results.is-stale { opacity: 0.5; }
+.results__lede { margin-bottom: 18px; font-size: 16px; max-width: 70ch; }
+.results__text { max-width: 70ch; margin-top: 4px; font-size: 14.5px; color: var(--muted); }
+.results__text + .interval { margin-top: 40px; }
+.nowrap { white-space: nowrap; }
+.results__chart-title { margin-top: 44px; }
+
+.chart__band { fill: var(--ink); opacity: 0.07; }
+.chart__line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart__zero { stroke: var(--line-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.chart__cross line { stroke: var(--muted); stroke-width: 1; }
+.chart__cross circle { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+.chart svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 6px; }
+.key--thick { height: 2px; }
+.key--band { width: 16px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+
+@media (max-width: 640px) {
+  .segmented button { padding: 6px 11px; }
+  .rule__row--fields { grid-template-columns: 1fr 1fr; }
+}
+
 /* ---------------------------------------------------------------- states */
 
 .skeleton { display: grid; gap: 14px; padding: 8px 0; }

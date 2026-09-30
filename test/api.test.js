@@ -158,6 +158,30 @@ test('preseason games and games a player sat out are not counted', { skip: !hasD
   assert.deepStrictEqual(inSeasons, [spread.count, spread.total_games]);
 });
 
+// Totals recomputed from the raw CSVs with pandas, independently of the SQL.
+test('backtest totals match an independent recomputation', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const total = rows => rows.reduce((a, r) => ({
+    bets: a.bets + r.bets, wins: a.wins + Number(r.wins), losses: a.losses + Number(r.losses),
+    pushes: a.pushes + Number(r.pushes), profit: a.profit + r.profit,
+  }), { bets: 0, wins: 0, losses: 0, pushes: 0, profit: 0 });
+  const cases = [
+    ['market=spread&venue=home&role=underdog', [4637, 2236, 2337, 64, -24276.69]],
+    ['market=moneyline&role=underdog&min=300', [4513, 715, 3798, 0, -29456]],
+    ['market=total&side=under&type=playoffs', [993, 508, 474, 11, 68.87]],
+  ];
+  for (const [query, [bets, wins, losses, pushes, profit]] of cases) {
+    const t = total((await get(`/backtest?${query}`)).body);
+    assert.deepStrictEqual([t.bets, t.wins, t.losses, t.pushes], [bets, wins, losses, pushes], query);
+    assert.ok(Math.abs(t.profit - profit) < 0.01, `${query}: ${t.profit}`);
+  }
+});
+
+test('backtest rejects values outside its lists', async () => {
+  for (const query of ['market=bogus', 'venue=middle', 'book=Nope', 'type=pre', "team=1'"]) {
+    assert.strictEqual((await get(`/backtest?${query}`)).status, 400, query);
+  }
+});
+
 test('% and _ in a search are matched literally', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
   assert.strictEqual((await get('/player/search?name=%25%25')).status, 200);
   assert.deepStrictEqual((await get('/player/search?name=%25%25')).body, []);

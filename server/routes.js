@@ -612,13 +612,131 @@ const trivia_underdog_players = (req, res) =>
     req => [num(req.query.minimum_games, 0)],
   )(req, res);
 
+// ---------------------------------------------------------------- backtest
+
+const BOOKS = ['5Dimes', 'BetOnline', 'Bookmaker', 'Bovada', 'Heritage', 'Intertops', 'JustBet', 'Pinnacle Sports',
+  'Sportsbetting', 'YouWager'];
+
+/** One of the allowed values of a query parameter, or a 400. */
+function oneOf(value, allowed, fallback) {
+  const v = value === undefined || value === '' ? fallback : String(value);
+  if (!allowed.includes(v)) throw new BadRequest(`Unexpected value: ${v}`);
+  return v;
+}
+
+/** SQL for the implied win probability of American odds: the break-even win rate. */
+const implied = price => `IF(${price} < 0, -${price} / (100 - ${price}), 100 / (100 + ${price}))`;
+
+// GET /backtest — $100 on every bet matching a rule, 2006-07 to 2017-18.
+//   market   spread | moneyline | total
+//   venue    any | home | away          (spread and moneyline: which team is bet on)
+//   role     any | favourite | underdog (spread and moneyline)
+//   side     over | under               (total)
+//   min, max the bet's line: the team's spread, its moneyline odds, or the total
+//   from, to seasons (2006 = 2006-07); type all | regular | playoffs
+//   team     a team id: bet on that team (spread, moneyline) or its games (total)
+//   book     one of BOOKS
+// Returns per-month totals (bets, wins, losses, pushes, profit, sum of squared
+// profit, sum of break-even rates) for the charts and intervals. Preseason games
+// and prices that are plainly errors in the source (spread or total prices
+// outside ±100..300, moneylines beyond ±5000) are left out. Every value from
+// the request is a bound parameter; only whitelisted SQL fragments vary.
+const backtest = async (req, res) => {
+  const q = req.query;
+  const market = oneOf(q.market, ['spread', 'moneyline', 'total'], 'spread');
+  const venue = oneOf(q.venue, ['any', 'home', 'away'], 'any');
+  const role = oneOf(q.role, ['any', 'favourite', 'underdog'], 'any');
+  const side = oneOf(q.side, ['over', 'under'], 'over');
+  const type = oneOf(q.type, ['all', 'regular', 'playoffs'], 'all');
+  const book = oneOf(q.book, BOOKS, '5Dimes');
+  const from = Math.max(2006, Math.min(2017, Math.floor(num(q.from, 2006))));
+  const to = Math.max(from, Math.min(2017, Math.floor(num(q.to, 2017))));
+  const min = num(q.min);
+  const max = num(q.max);
+  const team = q.team ? id(q.team) : null;
+
+  const where = [`g.game_id >= ${FIRST_COUNTED_GAME}`, 'g.season_year BETWEEN ? AND ?'];
+  const params = [book, from, to];
+  if (type !== 'all') {
+    where.push('g.season_type = ?');
+    params.push(type === 'playoffs' ? 'Playoffs' : 'Regular Season');
+  }
+
+  let line;
+  let price;
+  let result;
+  if (market === 'total') {
+    // One row per game (the home team's), betting the over or under.
+    line = 'bd.total1';
+    price = side === 'over' ? 'bd.total_price1' : 'bd.total_price2';
+    const diff = '(g.pts + o.pts - bd.total1)';
+    result = side === 'over' ? `SIGN${diff}` : `-SIGN${diff}`;
+    where.push("g.is_home = 't'", 'bd.total1 IS NOT NULL', `ABS(${price}) BETWEEN 100 AND 300`);
+    if (team) {
+      where.push('(g.team_id = ? OR g.a_team_id = ?)');
+      params.push(team, team);
+    }
+  } else {
+    // One row per team per game, betting on that team.
+    const mine = (a, b) => `IF(bd.team_id = g.team_id, bd.${a}, bd.${b})`;
+    if (market === 'spread') {
+      line = mine('spread1', 'spread2');
+      price = mine('spread_price1', 'spread_price2');
+      result = `SIGN(g.pts - o.pts + ${line})`;
+      where.push(`${line} IS NOT NULL`, `ABS(${price}) BETWEEN 100 AND 300`);
+    } else {
+      line = mine('moneyline_price1', 'moneyline_price2');
+      price = line;
+      result = "IF(g.wl = 'W', 1, -1)";
+      where.push(`${line} IS NOT NULL`, `ABS(${line}) BETWEEN 100 AND 5000`);
+    }
+    if (venue !== 'any') where.push(venue === 'home' ? "g.is_home = 't'" : "g.is_home = 'f'");
+    // A favourite has a negative spread or moneyline; a pick'em (0) is neither.
+    if (role !== 'any') where.push(role === 'favourite' ? `${line} < 0` : `${line} > 0`);
+    if (team) {
+      where.push('g.team_id = ?');
+      params.push(team);
+    }
+  }
+  if (min !== null) {
+    where.push(`${line} >= ?`);
+    params.push(min);
+  }
+  if (max !== null) {
+    where.push(`${line} <= ?`);
+    params.push(max);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT YEAR(b.game_date) AS year, MONTH(b.game_date) AS month, MIN(b.season_year) AS season,
+            COUNT(*) AS bets, SUM(b.result = 1) AS wins, SUM(b.result = -1) AS losses, SUM(b.result = 0) AS pushes,
+            SUM(b.profit) AS profit, SUM(b.profit * b.profit) AS sum_sq, SUM(b.break_even) AS break_even
+     FROM (
+         SELECT x.game_date, x.season_year, x.result,
+                CASE x.result WHEN 1 THEN ${payout('x.price')} WHEN 0 THEN 0 ELSE -100 END AS profit,
+                ${implied('x.price')} AS break_even
+         FROM (
+             SELECT g.game_date, g.season_year, ${result} AS result, ${price} AS price
+             FROM game_data g
+             JOIN game_data o ON o.game_id = g.game_id AND o.team_id = g.a_team_id
+             JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = ?
+             WHERE ${where.join(' AND ')}
+         ) x
+     ) b
+     GROUP BY year, month
+     ORDER BY year, month`,
+    params,
+  );
+  res.json(rows);
+};
+
 const handlers = {
   game, game_players, game_betting, matchup_stats, matchup_top_pairs, game_search,
   player_search, player_information, games_for_player, player_average_stats, player_underdog, player_spread_performance,
   team_search, team, games_for_team, team_game_betting_data, team_underdog_wins, team_underdog_money,
   team_top_players, team_spread_covering_percentage, team_seasons, player_seasons,
   middling_total_betting, middling_spread_betting, trivia_arbitrage, trivia_top_matchups,
-  trivia_spread_players, trivia_underdog_players,
+  trivia_spread_players, trivia_underdog_players, backtest,
 };
 
 module.exports = Object.fromEntries(Object.entries(handlers).map(([name, fn]) => [name, handle(fn)]));

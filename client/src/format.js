@@ -3,7 +3,8 @@
 
 const MINUS = '−';
 
-const signed = (text, x) => (x > 0 ? `+${text}` : x < 0 ? `${MINUS}${text}` : text);
+// A word joiner (U+2060) keeps a sign on the same line as its number.
+const signed = (text, x) => (x > 0 ? `+\u2060${text}` : x < 0 ? `${MINUS}\u2060${text}` : text);
 
 /** Round to the nearest half point, as betting lines are quoted. */
 export const half = x => Math.round(x * 2) / 2;
@@ -21,6 +22,9 @@ export const money = x => (x == null ? '–' : signed(`$${Math.abs(Math.round(x)
 export const cents = x => (x == null ? '–' : signed(`$${Math.abs(x).toFixed(2)}`, Number(x.toFixed(2))));
 
 export const pct = (x, digits = 1) => (x == null ? '–' : `${(x * 100).toFixed(digits)}%`);
+
+/** A signed percentage: +4.5%, −2.1%. */
+export const signedPct = (x, digits = 1) => (x == null ? '–' : signed(`${Math.abs(x * 100).toFixed(digits)}%`, Number((x * 100).toFixed(digits))));
 
 export const dec = (x, digits = 1) => (x == null ? '–' : Number(x).toFixed(digits));
 

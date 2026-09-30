@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useData, usePaged } from '../api';
 import { int, money, odds, pct, shortDate, spread } from '../format';
 import { Figure, LoadMore, Problem, Skeleton, useDebounced, useSticky, useTitle } from '../ui';
+import Tester from './Tester';
 
 export default function Strategies() {
   useTitle('Strategies');
@@ -11,9 +12,11 @@ export default function Strategies() {
       <header className="page__head">
         <h1>Strategies</h1>
         <p className="page__intro">
-          Two ways to exploit sportsbooks disagreeing about the same game, tested on every game from 2006–07 to 2017–18.
+          Test your own betting rule, then two ways to exploit sportsbooks disagreeing about the same game, each run on
+          every game from 2006–07 to 2017–18.
         </p>
       </header>
+      <Tester />
       <Middling />
       <Arbitrage />
     </div>
