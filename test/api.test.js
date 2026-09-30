@@ -25,6 +25,13 @@ const get = async path => {
   return { status: res.status, body: await res.json() };
 };
 
+test('a failed query is a 500 that the CDN will not cache', { skip: hasDatabase }, async () => {
+  const res = await fetch(base + '/team/search');
+  assert.strictEqual(res.status, 500);
+  assert.strictEqual(res.headers.get('cache-control'), 'no-store');
+  assert.strictEqual(res.headers.get('vercel-cdn-cache-control'), null);
+});
+
 test('ids that are not whole numbers are rejected before any SQL runs', async () => {
   for (const path of [
     '/player/1%20OR%201=1',

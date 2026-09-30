@@ -7,7 +7,7 @@ NBA betting analytics: how teams and players performed against the betting lines
 ## What it shows
 
 - **Games**: search 14,906 games (2006–07 to 2017–18) by team, season and total points. Each game has its box score, the lines from 10 sportsbooks, and the two teams' record against each other and against the spread.
-- **Players**: career averages, how often their team covered the spread, and what $100 bets on their team as the underdog would have returned.
+- **Players**: career averages (box scores from 2003–04 to 2022–23), how often their team covered the spread, and what $100 bets on their team as the underdog would have returned.
 - **Teams**: record, average lines per sportsbook, spread covers and underdog returns.
 - **Trivia**: "middling" opportunities between books, arbitrage between books' spread prices, and the players with the best records against the spread and as underdogs.
 
