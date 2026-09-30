@@ -509,7 +509,6 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Against the line */
@@ -721,7 +720,6 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 650;
   letter-spacing: -0.01em;
   line-height: 1;
-  font-variant-numeric: tabular-nums;
 }
 .figure--lg .figure__value { font-size: clamp(40px, 4.4vw, 54px); }
 .figure__label { font-size: 13px; color: var(--muted); }
@@ -754,40 +752,81 @@ button, input, select { font: inherit; color: inherit; }
   gap: 8px 32px;
   max-width: 760px;
 }
-.ats__text { margin-bottom: 4px; font-size: 14.5px; color: var(--muted); max-width: 46ch; }
-.ats .cover-bar { grid-column: 1 / -1; margin-top: 20px; }
+.ats__text { margin-bottom: 4px; font-size: 14.5px; color: var(--muted); max-width: 58ch; }
+.ats .interval { grid-column: 1 / -1; }
 
 @media (max-width: 560px) {
   .ats { grid-template-columns: 1fr; }
 }
 
-.cover-bar__track { position: relative; height: 10px; border-radius: 5px; background: var(--raised); }
-.cover-bar__fill {
+/* A value and its 95% interval on a zoomed axis, with reference lines. */
+
+.interval { max-width: 760px; margin: 26px 0 0; }
+.figures + .interval { margin-top: 44px; }
+.interval__plot { position: relative; height: 42px; margin-top: 22px; }
+.interval__plot::before {
+  content: '';
   position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 5px;
-  background: var(--fill-quiet);
-  transform-origin: left center;
-  animation: grow 0.8s var(--ease) 0.1s both;
+  left: 0;
+  right: 0;
+  top: 12px;
+  height: 1px;
+  background: var(--line-strong);
 }
-.cover-bar__fill.is-beat { background: var(--ball); }
-.cover-bar__tick {
+.interval__tick { position: absolute; top: 8px; width: 1px; height: 9px; background: var(--line-strong); }
+.interval__tick-label {
+  position: absolute;
+  top: 13px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.interval__tick-label.is-end { transform: translateX(-100%); }
+.interval__tick-label.is-start { transform: none; }
+.interval__ref {
   position: absolute;
   top: -6px;
-  bottom: -6px;
   width: 2px;
+  height: 26px;
   margin-left: -1px;
   border-radius: 1px;
   background: var(--ink);
 }
-.cover-bar__legend {
-  margin-top: 10px;
+.interval__ref--quiet { top: 2px; width: 1px; height: 20px; margin-left: 0; background: var(--muted); }
+.interval__ref-label {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
   font-size: 12.5px;
-  color: var(--muted);
-  text-align: right;
+  font-weight: 560;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.interval__ref-label.is-end { transform: translateX(-100%); }
+.interval__ref-label.is-start { transform: none; }
+.interval__range {
+  position: absolute;
+  top: 11px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+  transform-origin: center;
+  animation: grow 0.7s var(--ease) 0.1s both;
+}
+.interval__dot {
+  position: absolute;
+  top: 12.5px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.interval__dot::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+.interval__dot.is-beat { background: var(--ball); }
 
 /* ----------------------------------------------------------------- pages */
 
@@ -824,6 +863,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .board h2 { margin-bottom: 6px; }
 .board__about { min-height: 4.5em; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
+.board__note { margin-top: 14px; font-size: 13px; color: var(--muted); }
 
 @media (max-width: 1099px) {
   .boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }

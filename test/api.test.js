@@ -131,6 +131,20 @@ test('arbitrage bets both sides of the same spread', { skip: !hasDatabase && 'no
   }
 });
 
+test('leaderboards are ranked by the lower end of the 95% interval', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
+  const spread = (await get('/trivia/spread_players?minimum_games=50')).body;
+  const dogs = (await get('/trivia/underdog_players?minimum_games=10')).body;
+  for (const rows of [spread, dogs]) {
+    assert.strictEqual(rows.length, 15);
+    for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i - 1].lower_bound >= rows[i].lower_bound);
+    assert.ok(rows[0].players > rows[0].above_even);
+  }
+  // Wilson lower bound for 36 of 51 (Okaro White), checked against statsmodels.
+  const white = spread.find(r => r.person_id === 1627855);
+  assert.ok(Math.abs(white.lower_bound - 0.570009) < 1e-5);
+  assert.ok(dogs.every(r => r.money_sum_sq > 0));
+});
+
 test('% and _ in a search are matched literally', { skip: !hasDatabase && 'no DATABASE_URL' }, async () => {
   assert.strictEqual((await get('/player/search?name=%25%25')).status, 200);
   assert.deepStrictEqual((await get('/player/search?name=%25%25')).body, []);

@@ -101,7 +101,7 @@ function TeamDetail({ id }) {
       <section className="section">
         <h2>As the underdog</h2>
         <AsTheUnderdog loading={!dogWins.data || !dogMoney.data} subject={`The ${t.name}`}
-          games={w && w.total_games} wins={w && w.count} total={m && m.money} perGame={m && m.money_per_game} />
+          games={w && w.total_games} wins={w && w.count} total={m && m.money} sumSq={m && m.money_sum_sq} />
         <SourceNote />
       </section>
 

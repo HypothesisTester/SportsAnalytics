@@ -2,6 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../api';
 import { BREAK_EVEN, cents, int, pct } from '../format';
+import { meanInterval, wilson } from '../stats';
+import { bound } from './betting';
 import { Problem, Skeleton, Stepper, useDebounced, useSticky, useTitle } from '../ui';
 
 export default function Leaderboards() {
@@ -12,18 +14,23 @@ export default function Leaderboards() {
         <h1>Leaderboards</h1>
         <p className="page__intro">
           The players whose teams did best against the bookmakers, and the opponents who shared the scoring most.
-          Raise the minimum games to filter out small samples.
+          The first two lists are ranked by the bottom of each player's 95% interval, so a short hot streak can't top
+          them.
         </p>
       </header>
       <div className="boards">
         <Board
           title="Against the spread"
           about="How often a player's team covered the 5Dimes spread in games he played, not counting pushes."
+          chance={r => `${int(r.above_even)} of ${int(r.players)} players have an interval entirely above 50%. If none had a real edge, luck alone would put about ${int(r.players * 0.025)} there.`}
           path="/trivia/spread_players" stickyKey="spread" initial={50} max={1000} step={10}
           render={x => ({
             key: x.person_id,
             name: <Link to={`/players/${x.person_id}`}>{x.display_first_last}</Link>,
-            detail: `Covered ${int(x.count)} of ${int(x.total_games - x.pushes)}`,
+            detail: (() => {
+              const [lo, hi] = wilson(x.count, x.total_games - x.pushes);
+              return `Covered ${int(x.count)} of ${int(x.total_games - x.pushes)}, 95% interval ${pct(lo, 0)}–${pct(hi, 0)}`;
+            })(),
             figure: pct(x.spread_percentage),
             beat: x.spread_percentage > BREAK_EVEN,
           })}
@@ -31,11 +38,15 @@ export default function Leaderboards() {
         <Board
           title="As the underdog"
           about="Return per game from $100 on a player's team whenever it was the moneyline underdog."
+          chance={r => `${int(r.above_even)} of ${int(r.players)} players have an interval entirely above $0. With no real edge, luck alone would put at most about ${int(r.players * 0.025)} there.`}
           path="/trivia/underdog_players" stickyKey="underdog" initial={10} max={517} step={5}
           render={x => ({
             key: x.player_id,
             name: <Link to={`/players/${x.player_id}`}>{x.display_first_last}</Link>,
-            detail: `Won ${int(x.underdog_wins)} of ${int(x.total_games)}`,
+            detail: (() => {
+              const { low, high } = meanInterval(x.total_games, x.total_money, x.money_sum_sq);
+              return `Won ${int(x.underdog_wins)} of ${int(x.total_games)}, 95% interval ${bound(low)} to ${bound(high)}`;
+            })(),
             figure: cents(x.money_per_game),
             beat: x.money_per_game > 0,
           })}
@@ -56,7 +67,7 @@ export default function Leaderboards() {
   );
 }
 
-function Board({ title, about, path, stickyKey, initial, max, step, render }) {
+function Board({ title, about, chance, path, stickyKey, initial, max, step, render }) {
   const [minGames, setMinGames] = useSticky(`boards.${stickyKey}`, initial);
   const minimum = useDebounced(minGames, 300);
   const board = useData(path, { minimum_games: minimum }, { keep: true });
@@ -83,6 +94,7 @@ function Board({ title, about, path, stickyKey, initial, max, step, render }) {
               ))}
             </ol>
           )}
+      {chance && board.data && board.data[0] && <p className="board__note">{chance(board.data[0])}</p>}
     </section>
   );
 }

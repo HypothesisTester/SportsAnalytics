@@ -2,7 +2,7 @@
 // "against the line" graphics.
 import React, { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BREAK_EVEN, pct } from './format';
+
 
 /* ------------------------------------------------------------------ hooks */
 
@@ -309,21 +309,46 @@ export function LineStrip({ domain, line, result, ends, lineLabel, resultLabel, 
   );
 }
 
-/** How often the line was covered, against the 52.4% needed to profit at −110. */
-export function CoverBar({ rate }) {
-  const beat = rate > BREAK_EVEN;
+/**
+ * A value and its 95% interval on a zoomed scale, with reference lines (such as
+ * the 52.4% break-even). The dot is orange when the value beat the first
+ * reference. The same numbers are always in the text beside it.
+ *   domain: [min, max]; refs: [{ at, label }]; format: value -> text
+ */
+export function IntervalScale({ value, low, high, domain, refs = [], format, ticks, label }) {
+  const [lo, hi] = domain;
+  const at = x => ((Math.min(hi, Math.max(lo, x)) - lo) / (hi - lo)) * 100;
+  const beat = refs[0] && value > refs[0].at;
+  const edge = x => (x > 85 ? ' is-end' : x < 15 ? ' is-start' : '');
   return (
-    <div className="cover-bar" role="img" aria-label={`${pct(rate)} covered; break-even is ${pct(BREAK_EVEN)}`}>
-      <div className="cover-bar__track">
-        <span className={`cover-bar__fill${beat ? ' is-beat' : ''}`} style={{ width: `${Math.min(100, rate * 100)}%` }} />
-        <span className="cover-bar__tick" style={{ left: `${BREAK_EVEN * 100}%` }} />
+    <figure className="interval" role="img" aria-label={label}>
+      <div className="interval__plot">
+        {ticks.map(t => (
+          <span key={t} className="interval__tick" style={{ left: `${at(t)}%` }}>
+            <span className={`interval__tick-label${edge(at(t))}`}>{format(t)}</span>
+          </span>
+        ))}
+        {refs.map((r, i) => (
+          <span key={r.label} className={`interval__ref${i ? ' interval__ref--quiet' : ''}`} style={{ left: `${at(r.at)}%` }}>
+            {i === 0 && <span className={`interval__ref-label${edge(at(r.at))}`}>{r.label}</span>}
+          </span>
+        ))}
+        {low != null && (
+          <span className="interval__range" style={{ left: `${at(low)}%`, width: `${at(high) - at(low)}%` }} />
+        )}
+        <span className={`interval__dot${beat ? ' is-beat' : ''}`} style={{ left: `${at(value)}%` }}
+          title={low != null ? `${format(value)} (95% interval ${format(low)} to ${format(high)})` : format(value)} />
       </div>
-      <div className="cover-bar__legend" style={{ paddingRight: `calc(${100 - BREAK_EVEN * 100}% + 8px)` }}>
-        Break-even at {'−'}110: {pct(BREAK_EVEN)}
-      </div>
-    </div>
+    </figure>
   );
 }
+
+/** Ticks every `step` across a domain. */
+export const ticksFor = ([lo, hi], step) => {
+  const out = [];
+  for (let t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9; t += step) out.push(Number(t.toFixed(6)));
+  return out;
+};
 
 /** A labelled figure, e.g. "26.8" over "Points". */
 export function Figure({ value, label, size = 'md', tone }) {

@@ -30,7 +30,8 @@ GROUP BY r.player_id;
 -- what a winning $100 bet paid.
 TRUNCATE TABLE player_underdog_totals;
 INSERT INTO player_underdog_totals
-SELECT r.player_id, COUNT(*), SUM(IF(r.wl = 'W', r.moneyline, -100)), SUM(r.wl = 'W')
+SELECT r.player_id, COUNT(*), SUM(IF(r.wl = 'W', r.moneyline, -100)), SUM(r.wl = 'W'),
+       SUM(POW(IF(r.wl = 'W', r.moneyline, -100), 2))
 FROM (
     SELECT ps.player_id, g.wl, IF(b.team_id = ps.team_id, b.moneyline_price1, b.moneyline_price2) AS moneyline
     FROM player_stats ps

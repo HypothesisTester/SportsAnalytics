@@ -134,7 +134,7 @@ function PlayerDetail({ id }) {
       <section className="section">
         <h2>As the underdog</h2>
         <AsTheUnderdog loading={!underdog.data} subject="His team" games={u && u.total_games} wins={u && u.underdog_wins}
-          total={u && u.total_money} perGame={u && u.money_per_game} />
+          total={u && u.total_money} sumSq={u && u.money_sum_sq} />
         <SourceNote />
       </section>
     </article>

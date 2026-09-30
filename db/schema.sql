@@ -175,5 +175,6 @@ CREATE TABLE IF NOT EXISTS player_underdog_totals (
   total_games    INT     NOT NULL,
   total_money    DOUBLE  NOT NULL,
   underdog_wins  INT     NOT NULL,
+  sum_sq_money   DOUBLE  NOT NULL,  -- sum of each game's squared return, for an interval
   PRIMARY KEY (player_id)
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;

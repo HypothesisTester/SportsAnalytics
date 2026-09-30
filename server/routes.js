@@ -60,6 +60,28 @@ function handle(fn) {
   };
 }
 
+// ---------------------------------------------------------------- statistics
+// 95% intervals, computed in SQL where a list is ranked by them. The same
+// formulas are in client/src/stats.js for display.
+
+const Z = 1.959963984540054;
+
+/** SQL for the lower end of the Wilson 95% interval of `k` successes in `n` trials. */
+const wilsonLower = (k, n) =>
+  `((${k}) / (${n}) + ${Z * Z} / (2 * (${n})) - ${Z} * SQRT((${k}) / (${n}) * (1 - (${k}) / (${n})) / (${n})
+     + ${Z * Z} / (4 * (${n}) * (${n})))) / (1 + ${Z * Z} / (${n}))`;
+
+// Two-sided 95% critical values of Student's t for 1..30 degrees of freedom.
+const T975 = [12.7062, 4.3027, 3.1824, 2.7764, 2.5706, 2.4469, 2.3646, 2.3060, 2.2622, 2.2281, 2.2010, 2.1788, 2.1604, 2.1448, 2.1314, 2.1199, 2.1098, 2.1009, 2.0930, 2.0860, 2.0796, 2.0739, 2.0687, 2.0639, 2.0595, 2.0555, 2.0518, 2.0484, 2.0452, 2.0423];
+
+/** SQL for t(0.975, df); past 30 degrees of freedom 1.96 + 2.5/df is within 0.002. */
+const tCritical = df => `IF((${df}) <= 30, ELT((${df}), ${T975.join(', ')}), ${Z} + 2.5 / (${df}))`;
+
+/** SQL for the lower end of the 95% t interval of a mean, from n, the sum and the sum of squares. */
+const meanLower = (n, sum, sumSq) =>
+  `(${sum}) / (${n}) - ${tCritical(`(${n}) - 1`)}
+     * SQRT(GREATEST((${sumSq}) - (${sum}) * (${sum}) / (${n}), 0) / ((${n}) - 1) / (${n}))`;
+
 // ---------------------------------------------------------------- games
 
 // GET /game/:game_id — both teams' rows, home team first.
@@ -265,6 +287,7 @@ const player_underdog = (req, res) =>
     `SELECT P.person_id AS player_id, P.display_first_last, COUNT(*) AS total_games,
             SUM(IF(r.wl = 'W', r.moneyline, -100)) AS total_money,
             SUM(IF(r.wl = 'W', r.moneyline, -100)) / COUNT(*) AS money_per_game,
+            SUM(POW(IF(r.wl = 'W', r.moneyline, -100), 2)) AS money_sum_sq,
             SUM(r.wl = 'W') AS underdog_wins
      FROM players P JOIN (
          SELECT ps.player_id, g.wl, IF(bd.team_id = ps.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline
@@ -362,7 +385,8 @@ const team_underdog = (req, res) =>
     `SELECT T.team_id, T.name, COUNT(*) AS total_games, SUM(r.wl = 'W') AS count,
             SUM(r.wl = 'W') / COUNT(*) AS percentage,
             SUM(IF(r.wl = 'W', r.moneyline, -100)) AS money,
-            SUM(IF(r.wl = 'W', r.moneyline, -100)) / COUNT(*) AS money_per_game
+            SUM(IF(r.wl = 'W', r.moneyline, -100)) / COUNT(*) AS money_per_game,
+            SUM(POW(IF(r.wl = 'W', r.moneyline, -100), 2)) AS money_sum_sq
      FROM teams T JOIN (
          SELECT g.team_id, g.wl, IF(bd.team_id = g.team_id, bd.moneyline_price1, bd.moneyline_price2) AS moneyline
          FROM game_data g JOIN betting_data bd ON bd.game_id = g.game_id AND bd.book_name = '5Dimes'
@@ -496,29 +520,44 @@ const trivia_top_matchups = (req, res) =>
   )(req, res);
 
 // GET /trivia/spread_players?minimum_games= — players whose teams covered the
-// 5Dimes spread most often. Totals precomputed in player_spread_totals.
+// 5Dimes spread most often, ranked by the lower end of the Wilson 95% interval so
+// a short streak can't top the list. Every row also carries how many players
+// qualified and how many have an interval entirely above 50%.
 const trivia_spread_players = (req, res) =>
   sendRows(
-    `SELECT P.person_id, P.display_first_last, T.spread_covers AS count, T.pushes, T.total_games,
-            T.spread_covers / NULLIF(T.total_games - T.pushes, 0) AS spread_percentage
-     FROM player_spread_totals T
-     JOIN players P ON T.player_id = P.person_id
-     WHERE T.total_games >= ?
-     ORDER BY spread_percentage DESC, P.person_id
+    `SELECT * FROM (
+         SELECT P.person_id, P.display_first_last, T.spread_covers AS count, T.pushes, T.total_games,
+                T.spread_covers / (T.total_games - T.pushes) AS spread_percentage,
+                ${wilsonLower('T.spread_covers', 'T.total_games - T.pushes')} AS lower_bound,
+                COUNT(*) OVER () AS players,
+                SUM(${wilsonLower('T.spread_covers', 'T.total_games - T.pushes')} > 0.5) OVER () AS above_even
+         FROM player_spread_totals T
+         JOIN players P ON T.player_id = P.person_id
+         WHERE T.total_games >= ? AND T.total_games > T.pushes
+     ) ranked
+     ORDER BY lower_bound DESC, person_id
      LIMIT 15`,
     req => [num(req.query.minimum_games, 0)],
   )(req, res);
 
-// GET /trivia/underdog_players?minimum_games= — best returns per game when the
-// player's team was the underdog. Totals precomputed in player_underdog_totals.
+// GET /trivia/underdog_players?minimum_games= — the best returns per game from
+// $100 on the player's team whenever it was the underdog, ranked by the lower end
+// of the 95% t interval of that return. Totals precomputed in
+// player_underdog_totals; rows carry the qualifying count and how many have an
+// interval entirely above zero.
 const trivia_underdog_players = (req, res) =>
   sendRows(
-    `SELECT T.player_id, P.display_first_last, T.total_games, T.total_money,
-            T.total_money / T.total_games AS money_per_game, T.underdog_wins
-     FROM player_underdog_totals T
-     JOIN players P ON T.player_id = P.person_id
-     WHERE T.total_games >= ?
-     ORDER BY money_per_game DESC, T.player_id
+    `SELECT * FROM (
+         SELECT T.player_id, P.display_first_last, T.total_games, T.total_money, T.sum_sq_money AS money_sum_sq,
+                T.total_money / T.total_games AS money_per_game, T.underdog_wins,
+                ${meanLower('T.total_games', 'T.total_money', 'T.sum_sq_money')} AS lower_bound,
+                COUNT(*) OVER () AS players,
+                SUM(${meanLower('T.total_games', 'T.total_money', 'T.sum_sq_money')} > 0) OVER () AS above_even
+         FROM player_underdog_totals T
+         JOIN players P ON T.player_id = P.person_id
+         WHERE T.total_games >= GREATEST(?, 2)
+     ) ranked
+     ORDER BY lower_bound DESC, player_id
      LIMIT 15`,
     req => [num(req.query.minimum_games, 0)],
   )(req, res);
