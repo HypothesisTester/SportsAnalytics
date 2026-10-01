@@ -27,7 +27,7 @@ flowchart LR
     API -->|"read-only user,<br/>bound parameters"| DB
 ```
 
-The React app is served as static files, with no UI library: plain CSS, one self-hosted variable font, and about 76 kB of gzipped JavaScript and CSS. Every game, team and player has its own URL. The API is one Express app running as a Vercel serverless function, and Vercel's CDN caches its responses for a day, since the data only changes when it is reloaded.
+The React app is built once into static files (HTML, JavaScript, CSS and the font) that Vercel's CDN serves directly, with no server rendering. It uses no UI library: plain CSS, one self-hosted variable font, and about 86 kB of gzipped JavaScript and CSS. Every game, team and player has its own URL. The API is one Express app running as a Vercel serverless function. Since the data only changes when it is reloaded, browsers may reuse an API response for an hour and Vercel's CDN for a week, and each deployment starts with an empty cache.
 
 ## Data
 
